@@ -1,0 +1,220 @@
+/* 全局样式重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+#app {
+  height: 100%;
+}
+
+/* 首页样式 */
+.home-page {
+  min-height: 100vh;
+  background-color: #f5f5f5;
+  padding-bottom: 60px;
+}
+
+.nav-bar {
+  background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 100%);
+  color: white;
+  padding: 15px 0;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.nav-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.app-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 0;
+}
+
+.nav-right {
+  display: flex;
+  gap: 30px;
+}
+
+.nav-item {
+  color: white;
+  text-decoration: none;
+  font-size: 16px;
+  padding: 5px 10px;
+}
+
+.nav-item.active {
+  background-color: rgba(255,255,255,0.2);
+  border-radius: 4px;
+}
+
+.carousel {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  overflow: hidden;
+}
+
+.carousel-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.carousel-content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  text-align: center;
+}
+
+.carousel-content h2 {
+  font-size: 36px;
+  margin-bottom: 20px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.carousel-tags {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.tag {
+  background-color: rgba(255,255,255,0.3);
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.quick-access {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  padding: 20px;
+  background-color: white;
+  margin: 20px;
+  border-radius: 10px;
+}
+
+.quick-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+.quick-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  margin-bottom: 10px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.tech-icon { background-color: #e3f2fd; background-image: url('https://via.placeholder.com/40/2196f3/ffffff?text=🔬'); }
+.weather-icon { background-color: #e8f5e9; background-image: url('https://via.placeholder.com/40/4caf50/ffffff?text=🌤️'); }
+.dev-icon { background-color: #fff8e1; background-image: url('https://via.placeholder.com/40/ffc107/ffffff?text=🏡'); }
+.policy-icon { background-color: #f3e5f5; background-image: url('https://via.placeholder.com/40/9c27b0/ffffff?text=📄'); }
+
+.news-section { padding: 20px; }
+.section-title { font-size: 24px; text-align: center; margin-bottom: 20px; }
+.news-list { display: flex; flex-direction: column; gap: 15px; }
+.news-item { display: flex; background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.news-content { flex: 1; padding-right: 15px; }
+.news-title { font-size: 18px; margin-bottom: 10px; }
+.news-summary { font-size: 14px; color: #666; }
+.news-image { width: 120px; height: 80px; border-radius: 6px; overflow: hidden; }
+.news-image img { width: 100%; height: 100%; object-fit: cover; }
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: white;
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+}
+
+.bottom-nav-item { display: flex; flex-direction: column; align-items: center; color: #666; text-decoration: none; }
+.bottom-nav-item.active { color: #4CAF50; }
+.nav-icon { width: 24px; height: 24px; margin-bottom: 5px; background-size: contain; background-repeat: no-repeat; background-position: center; }
+.home-icon { background-image: url('https://via.placeholder.com/24/4CAF50/ffffff?text=🏠'); }
+.forum-icon { background-image: url('https://via.placeholder.com/24/666/ffffff?text=💬'); }
+.mall-icon { background-image: url('https://via.placeholder.com/24/666/ffffff?text=🛒'); }
+.profile-icon { background-image: url('https://via.placeholder.com/24/666/ffffff?text=👤'); }
+
+/* 路由链接激活状态 */
+.router-link-active {
+  color: #4CAF50 !important;
+}
+
+.router-link-active.nav-item {
+  background-color: rgba(255,255,255,0.2);
+}
+
+.router-link-active.bottom-nav-item {
+  color: #4CAF50;
+}
+
+/* 额外的全局样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #2c3e50;
+  touch-action: manipulation;
+}
+
+/* 确保应用容器能够正确显示 */
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  /* 移除固定margin，避免内容被推离视口 */
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}

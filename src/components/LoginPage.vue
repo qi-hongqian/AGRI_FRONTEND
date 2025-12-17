@@ -1,0 +1,1051 @@
+<template>
+  <div class="login-container">
+
+    <!-- 标题栏 -->
+    <div class="toolbar">
+      <h1 class="toolbar-title">{{ isRegister ? '用户注册' : '农业科普平台' }}</h1>
+      <button v-if="isRegister" @click="cancelRegister" class="back-button">
+        &lt;
+      </button>
+    </div>
+
+    <!-- 内容区域 -->
+    <div class="content">
+      <!-- Logo 区域 - 仅登录页面显示 -->
+      <div v-if="!isRegister" class="logo-container">
+        <div class="logo-circle">
+          <!-- 使用logo图片 -->
+          <img src="/src/assets/logo.png" alt="农业科普平台" class="logo-image" />
+        </div>
+      </div>
+
+      <!-- 登录表单 -->
+      <div v-if="!isRegister" class="form-container">
+        <!-- 手机号输入框 -->
+        <div class="input-group">
+          <i class="icon-user">📱</i>
+          <input 
+            type="tel" 
+            v-model="phone" 
+            placeholder="请输入手机号" 
+            class="input-field"
+            @input="onPhoneChange"
+          />
+        </div>
+
+        <!-- 密码输入框 -->
+        <div class="input-group">
+          <i class="icon-lock">🔒</i>
+          <input 
+            :type="showPassword ? 'text' : 'password'" 
+            v-model="password" 
+            placeholder="请输入密码" 
+            class="input-field"
+          />
+          <button 
+            @click="togglePasswordVisibility" 
+            class="toggle-password"
+            type="button"
+          >
+            {{ showPassword ? '👁️‍🗨️' : '👁️' }}
+          </button> 
+        </div>
+
+        <!-- 验证码输入框 -->
+        <div class="input-group captcha-group">
+          <i class="icon-shield">🛡️</i>
+          <input 
+            type="text" 
+            v-model="captcha" 
+            placeholder="请输入验证码" 
+            class="input-field"
+          />
+          <!-- 验证码图片 -->
+          <img 
+            v-if="captchaImage" 
+            :src="captchaImage" 
+            alt="验证码" 
+            class="captcha-image" 
+            @click="refreshCaptcha"
+            :title="'点击刷新验证码'"
+          />
+          <div v-else class="captcha-loading">加载中...</div>
+        </div>
+
+        <!-- 注册链接 -->
+        <div class="register-link">
+          <span @click="handleRegister" class="register-text">立即注册</span>
+        </div>
+
+        <!-- 错误提示 -->
+        <div v-if="loginError" class="error-message">
+          {{ loginError }}
+        </div>
+
+        <!-- 登录按钮 -->
+        <button class="login-button" @click="handleLogin" :disabled="loginLoading">
+          {{ loginLoading ? '登录中...' : '登录' }}
+        </button>
+      </div>
+
+      <!-- 注册表单 -->
+      <div v-else class="form-container">
+        <!-- 头像上传（圆形，可点击修改） -->
+        <div class="avatar-upload-wrapper">
+          <div v-if="avatarPreviewUrl" class="avatar-preview-circle">
+            <img :src="avatarPreviewUrl" alt="头像" class="preview-image-circle" />
+            <div class="avatar-overlay" @click="triggerAvatarInput">
+              <span class="overlay-text">📷 修改</span>
+            </div>
+          </div>
+          <div v-else class="avatar-placeholder" @click="triggerAvatarInput">
+            <i class="placeholder-icon">📷</i>
+            <p class="placeholder-text">点击上传头像</p>
+          </div>
+          <input 
+            ref="avatarInput"
+            id="avatar-upload"
+            type="file" 
+            accept="image/*"
+            @change="handleAvatarChange"
+            class="file-input"
+          />
+        </div>
+
+        <!-- 手机号输入框 -->
+        <div class="input-group">
+          <i class="icon-phone">📱</i>
+          <input 
+            type="tel" 
+            v-model="registerData.phone" 
+            placeholder="请输入手机号" 
+            class="input-field"
+          />
+        </div>
+
+        <!-- 密码输入框 -->
+        <div class="input-group">
+          <i class="icon-lock">🔒</i>
+          <input 
+            :type="showRegisterPassword ? 'text' : 'password'" 
+            v-model="registerData.password" 
+            placeholder="请输入密码" 
+            class="input-field"
+          />
+          <button 
+            @click="toggleRegisterPasswordVisibility" 
+            class="toggle-password"
+            type="button"
+          >
+            {{ showRegisterPassword ? '👁️‍🗨️' : '👁️' }}
+          </button> 
+        </div>
+
+        <!-- 重复密码输入框 -->
+        <div class="input-group">
+          <i class="icon-lock">🔒</i>
+          <input 
+            :type="showRegisterPassword ? 'text' : 'password'" 
+            v-model="registerData.confirmPassword" 
+            placeholder="请重复密码" 
+            class="input-field"
+          />
+        </div>
+
+        <!-- 昵称输入框 -->
+        <div class="input-group">
+          <i class="icon-user">👤</i>
+          <input 
+            type="text" 
+            v-model="registerData.nickname" 
+            placeholder="请输入昵称" 
+            class="input-field"
+          />
+        </div>
+
+        <!-- 错误提示 -->
+        <div v-if="registerError" class="error-message">
+          {{ registerError }}
+        </div>
+
+        <!-- 注册按钮 -->
+        <div class="register-buttons">
+          <button class="cancel-button" @click="cancelRegister">
+            取消
+          </button>
+          <button class="submit-button" @click="submitRegister" :disabled="registerLoading">
+            {{ registerLoading ? '提交中...' : '提交' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import api from '../api'
+import { useAppStore } from '../stores/app'
+
+const router = useRouter()
+const appStore = useAppStore()
+
+// 登录表单数据
+const phone = ref('')
+const password = ref('')
+const captcha = ref('')
+const captchaImage = ref('')
+const showPassword = ref(false)
+const showRegisterPassword = ref(false)
+const isRegister = ref(false)
+const time = ref('')
+const loginLoading = ref(false)
+const loginError = ref('')
+
+// 注册表单数据
+const registerData = ref({
+  phone: '',
+  password: '',
+  confirmPassword: '',
+  nickname: ''
+})
+const registerLoading = ref(false)
+const registerError = ref('')
+const avatarFile = ref(null)  // 头像文件
+const avatarFileName = ref('')  // 头像文件名
+const tempAvatarUrl = ref('')  // 临时头像URL（后端返回）
+const avatarPreviewUrl = ref('')  // 头像预览URL（完整路径）
+
+// 计算属性 - 空的，不再使用角色切换
+
+// 刷新验证码图片
+const refreshCaptcha = async (phoneNumber = '') => {
+  const phoneToUse = phoneNumber || phone.value
+  
+  if (!phoneToUse.trim()) {
+    loginError.value = '请先输入手机号'
+    return
+  }
+  
+  try {
+    loginError.value = ''
+    console.log('[开始加载验证码]', { phone: phoneToUse })
+    
+    const response = await api.user.getCaptcha(phoneToUse)
+    
+    console.log('[验证码响应]', response)
+    
+    if (response.success) {
+      // 检查响应结构，不同的后端可能返回不同的字段
+      const captchaImageData = response.captchaImage || response.data?.captchaImage
+      
+      if (captchaImageData) {
+        captchaImage.value = captchaImageData
+        captcha.value = ''
+        console.log('[验证码图片加载成功]')
+      } else {
+        loginError.value = '验证码数据不合法'
+        console.error('[验证码数据结构异常]', response)
+      }
+    } else {
+      loginError.value = response.message || '获取验证码失败'
+      console.error('[验证码请求失败]', response.message)
+    }
+  } catch (error) {
+    console.error('[验证码加载错误]', error)
+    loginError.value = '获取验证码失败，请检查网络连接'
+  }
+}
+
+// 手机号一样时改变时，随之也自动加载验证码
+const onPhoneChange = () => {
+  // 检查手机号是否有效
+  const phoneReg = /^1[3-9]\d{9}$/
+  if (phoneReg.test(phone.value)) {
+    // 手机号有效，自动加载验证码
+    refreshCaptcha()
+  } else {
+    // 手机号无效，清除验证码图片
+    captchaImage.value = ''
+  }
+}
+
+const validateLoginForm = () => {
+  if (!phone.value.trim()) {
+    loginError.value = '请输入手机号'
+    return false
+  }
+  const phoneReg = /^1[3-9]\d{9}$/
+  if (!phoneReg.test(phone.value)) {
+    loginError.value = '手机号格式不正确'
+    return false
+  }
+  if (!password.value) {
+    loginError.value = '请输入密码'
+    return false
+  }
+  if (!captcha.value) {
+    loginError.value = '请输入验证码'
+    return false
+  }
+  return true
+}
+
+const validateRegisterForm = () => {
+  const { phone, password: pwd, confirmPassword, nickname } = registerData.value
+  
+  // 验证手机号
+  if (!phone || !phone.trim()) {
+    registerError.value = '请输入手机号'
+    return false
+  }
+  const phoneReg = /^1[3-9]\d{9}$/
+  if (!phoneReg.test(phone)) {
+    registerError.value = '手机号格式不正确'
+    return false
+  }
+  
+  // 验证密码
+  if (!pwd || !pwd.trim()) {
+    registerError.value = '请输入密码'
+    return false
+  }
+  if (pwd.length < 6) {
+    registerError.value = '密码长度不能小于 6 位'
+    return false
+  }
+  
+  // 验证确认密码
+  if (!confirmPassword || !confirmPassword.trim()) {
+    registerError.value = '请确认密码'
+    return false
+  }
+  if (pwd !== confirmPassword) {
+    registerError.value = '两次输入的密码不一致'
+    return false
+  }
+  
+  // 验证昵称
+  if (!nickname || !nickname.trim()) {
+    registerError.value = '请输入昵称'
+    return false
+  }
+  
+  return true
+}
+
+// 处理登录
+const handleLogin = async () => {
+  loginError.value = ''
+  
+  // 表单验证
+  if (!validateLoginForm()) {
+    return
+  }
+  
+  try {
+    loginLoading.value = true
+    
+    // 调用登录API
+    const response = await api.user.login(phone.value, password.value, captcha.value)
+    
+    console.log('[登录响应]', response)
+    
+    if (response.success) {
+      // 保存用户信息和token到store
+      appStore.setUser({
+        ...response.user,
+        token: response.token
+      })
+      
+      // 记录登录成功
+      console.log('登录成功', {
+        user: response.user,
+        token: response.token
+      })
+      
+      // 跳转到首页
+      router.push('/home')
+    } else {
+      // 处理错误响应（验证码错误、密码错误等）
+      loginError.value = response.message || '登录失败'
+      refreshCaptcha()  // 重新加载验证码
+    }
+  } catch (error) {
+    console.error('登录错误:', error)
+    loginError.value = error.message || '登录失败，请检查网络连接'
+    refreshCaptcha()
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+// 处理注册
+const handleRegister = () => {
+  isRegister.value = true
+  registerError.value = ''
+}
+
+// 取消注册
+const cancelRegister = async () => {
+  // 如果有临时头像，删除它
+  if (tempAvatarUrl.value) {
+    try {
+      console.log('[删除临时头像]', tempAvatarUrl.value)
+      await api.user.deleteTempAvatar(tempAvatarUrl.value)
+      console.log('[临时头像已删除]')
+    } catch (error) {
+      console.error('[删除临时头像失败]', error)
+    }
+  }
+  
+  isRegister.value = false
+  registerError.value = ''
+  registerData.value = {
+    phone: '',
+    password: '',
+    confirmPassword: '',
+    nickname: ''
+  }
+  avatarFile.value = null
+  avatarFileName.value = ''
+  tempAvatarUrl.value = ''
+  avatarPreviewUrl.value = ''
+}
+
+const avatarInput = ref(null)  // 文件输入DOM
+
+// 触发文件输入
+const triggerAvatarInput = () => {
+  avatarInput.value?.click()
+}
+
+// 处理头像上传
+const handleAvatarChange = async (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  // 验证文件类型
+  if (!file.type.startsWith('image/')) {
+    registerError.value = '请选择图片文件'
+    return
+  }
+  // 验证文件大小（最大 2MB）
+  if (file.size > 2 * 1024 * 1024) {
+    registerError.value = '头像文件大小不能超过2MB'
+    return
+  }
+  
+  avatarFile.value = file
+  avatarFileName.value = file.name
+  registerError.value = ''
+  
+  try {
+    console.log('[开始上传临时头像]', file.name)
+    
+    // 立即上传到后端获取临时URL
+    const response = await api.user.uploadTempAvatar(file)
+    const data = response.data || response
+    
+    if (data.success && data.avatarUrl) {
+      tempAvatarUrl.value = data.avatarUrl
+      avatarPreviewUrl.value = `http://localhost:8081${data.avatarUrl}`
+      console.log('[临时头像上传成功]', {
+        tempUrl: tempAvatarUrl.value,
+        previewUrl: avatarPreviewUrl.value
+      })
+    } else {
+      registerError.value = data.message || '头像上传失败'
+    }
+  } catch (error) {
+    console.error('[头像上传错误]', error)
+    registerError.value = '头像上传失败，请重试'
+  }
+}
+
+// 提交注册
+const submitRegister = async () => {
+  console.log('[点击提交按钮]') // 调试日志
+  registerError.value = ''
+  
+  console.log('[注册数据]', {
+    phone: registerData.value.phone,
+    password: registerData.value.password,
+    confirmPassword: registerData.value.confirmPassword,
+    nickname: registerData.value.nickname
+  })
+  
+  // 表单验证
+  if (!validateRegisterForm()) {
+    console.log('[验证失败]', registerError.value)
+    return
+  }
+  
+  console.log('[验证成功]，开始发送请求')
+  
+  try {
+    registerLoading.value = true
+    
+    // 创建 FormData 对象
+    const formData = new FormData()
+    formData.append('phone', registerData.value.phone)
+    formData.append('password', registerData.value.password)
+    formData.append('nickname', registerData.value.nickname)
+    
+    // 传递已上传的头像URL（而不是文件）
+    formData.append('avatarUrl', tempAvatarUrl.value || '')
+    
+    console.log('[注册请求]', {
+      phone: registerData.value.phone,
+      nickname: registerData.value.nickname,
+      avatarUrl: tempAvatarUrl.value || '无'
+    })
+    
+    // 调用注册 API
+    const response = await api.user.register(formData)
+    
+    console.log('[注册响应]', response)
+    
+    // 直接 axios 返回的是 response 对象，数据在 response.data 中
+    const data = response.data || response
+    
+    if (data.success) {
+      console.log('注册成功', data.user)
+      tempAvatarUrl.value = ''  // 清空临时URL，注册成功后不需要删除
+      alert('注册成功，请登录')
+      cancelRegister()
+    } else {
+      registerError.value = data.message || '注册失败'
+    }
+  } catch (error) {
+    console.error('注册错误:', error)
+    registerError.value = error.message || '注册失败，请检查网络连接'
+  } finally {
+    registerLoading.value = false
+  }
+}
+
+// 切换密码可见性
+const togglePasswordVisibility = () => {
+  showPassword.value = !showPassword.value
+}
+
+const toggleRegisterPasswordVisibility = () => {
+  showRegisterPassword.value = !showRegisterPassword.value
+}
+
+// 定时器引用
+let timeUpdateTimer = null
+
+// 更新时间
+const updateTime = () => {
+  const now = new Date()
+  const hours = now.getHours().toString().padStart(2, '0')
+  const minutes = now.getMinutes().toString().padStart(2, '0')
+  time.value = `${hours}:${minutes}`
+}
+
+// 组件挂载
+onMounted(() => {
+  // 不会在挂载时也调用获取验证码，因为手机号为空
+  // 等用户输入手机号后再调用
+  
+  // 更新时间
+  updateTime()
+  timeUpdateTimer = setInterval(updateTime, 60000)
+  
+  // 监听页面关闭，删除临时头像
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+// 页面关闭前的处理
+const handleBeforeUnload = () => {
+  if (tempAvatarUrl.value) {
+    // 使用 keepalive 确保请求在页面关闭后继续
+    fetch(`http://localhost:8081/api/user/avatar/temp-delete?avatarUrl=${encodeURIComponent(tempAvatarUrl.value)}`, {
+      method: 'DELETE',
+      keepalive: true
+    })
+  }
+}
+
+// 组件卸载
+onUnmounted(() => {
+  if (timeUpdateTimer) {
+    clearInterval(timeUpdateTimer)
+  }
+  
+  // 移除页面关闭监听
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  
+  // 如果有临时头像，删除它
+  if (tempAvatarUrl.value) {
+    api.user.deleteTempAvatar(tempAvatarUrl.value).catch(err => {
+      console.error('[卸载时删除临时头像失败]', err)
+    })
+  }
+})
+</script>
+
+<style scoped>
+.login-container {
+  height: 100vh;
+  background: linear-gradient(to bottom, #FAF8F0, #FFFFFF);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* 系统状态栏 */
+.system-bar {
+  height: 32px;
+  background: #66BB6A;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  color: black;
+  font-size: 14px;
+}
+
+.status-icons {
+  display: flex;
+  gap: 4px;
+}
+
+.time {
+  font-weight: 500;
+}
+
+/* 标题栏 */
+.toolbar {
+  height: 56px;
+  background: linear-gradient(135deg, #66BB6A, #81C784);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+.back-button {
+  position: absolute;
+  left: 16px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.toolbar-title {
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+/* 内容区域 */
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+/* Logo 区域 */
+.logo-container {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+  padding: 0;
+}
+
+.logo-circle {
+  width: 400px;
+  height: 400px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #E8F5E9, #C8E6C9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  padding: 0;
+}
+
+.logo-image {
+  width: 360px;
+  height: 360px;
+  object-fit: contain;
+  border-radius: 16px;
+  max-width: none;
+  max-height: none;
+}
+
+/* 表单容器 */
+.form-container {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* 输入组 */
+.input-group {
+  position: relative;
+  margin-bottom: 20px;
+  background: white;
+  border: 1px solid #E0E0E0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 56px;
+}
+
+.icon-user, .icon-lock, .icon-shield {
+  font-size: 20px;
+  margin-right: 12px;
+  color: #757575;
+}
+
+.input-field {
+  flex: 1;
+  border: none;
+  outline: none;
+  height: 100%;
+  font-size: 16px;
+  color: #212121;
+  background: transparent;
+}
+
+.toggle-password {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  margin-left: 8px;
+  color: #757575;
+}
+
+.input-field::placeholder {
+  color: #9E9E9E;
+}
+
+/* 验证码组 */
+.captcha-group {
+  display: flex;
+  align-items: center;
+}
+
+.captcha-code {
+  font-size: 18px;
+  font-weight: bold;
+  color: #F44336;
+  padding: 8px 16px;
+  background: #F5F5F5;
+  border-radius: 8px;
+  margin-left: 12px;
+  min-width: 80px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.3s;
+}
+
+.captcha-code:hover {
+  background: #E0E0E0;
+}
+
+/* 头像上传 */
+.upload-group {
+  position: relative;
+}
+
+.upload-label {
+  flex: 1;
+  padding: 12px;
+  background: #F5F5F5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #666;
+}
+
+.upload-label:hover {
+  background: #E0E0E0;
+}
+
+.file-input {
+  display: none;
+}
+
+/* 头像上传布局 */
+.avatar-upload-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+/* 头像预览圆形 */
+.avatar-preview-circle {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 4px solid #66BB6A;
+  box-shadow: 0 4px 12px rgba(102, 187, 106, 0.3);
+}
+
+.preview-image-circle {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 头像整上改改布 */
+.avatar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.avatar-preview-circle:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.overlay-text {
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* 头像占位符 */
+.avatar-placeholder {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: #F5F5F5;
+  border: 3px dashed #66BB6A;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.avatar-placeholder:hover {
+  background: #EFEFEF;
+  border-color: #4CAF50;
+}
+
+.placeholder-icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.placeholder-text {
+  font-size: 12px;
+  color: #666;
+  margin: 0;
+  text-align: center;
+}
+
+/* 验证码图片 */
+.captcha-image {
+  height: 40px;
+  width: auto;
+  border-radius: 4px;
+  margin-left: 8px;
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+.captcha-image:hover {
+  opacity: 0.8;
+}
+
+/* 验证码加载提示 */
+.captcha-loading {
+  height: 40px;
+  width: 80px;
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 12px;
+  background: #F5F5F5;
+  border-radius: 4px;
+}
+
+/* 错误提示样式 */
+.error-message {
+  color: #f44336;
+  font-size: 14px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background-color: #ffebee;
+  border-radius: 4px;
+  border-left: 3px solid #f44336;
+}
+
+/* 注册链接 */
+.register-link {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 24px;
+}
+
+.register-text {
+  color: #66BB6A;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* 角色切换 */
+.role-tabs {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.role-tab {
+  flex: 1;
+  text-align: center;
+  padding: 12px 0;
+  font-size: 16px;
+  color: #757575;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.role-tab.active {
+  color: #66BB6A;
+  font-weight: 500;
+}
+
+.role-indicator {
+  position: absolute;
+  bottom: 0;
+  width: 33.33%;
+  height: 3px;
+  background: #66BB6A;
+  border-radius: 2px;
+}
+
+/* 登录按钮 */
+.login-button {
+  width: 100%;
+  height: 56px;
+  background: #66BB6A;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 32px;
+  transition: background 0.3s ease;
+}
+
+.login-button:hover:not(:disabled) {
+  background: #4CAF50;
+}
+
+.login-button:active:not(:disabled) {
+  background: #43A047;
+}
+
+.login-button:disabled {
+  background: #BDBDBD;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 注册按钮样式 */
+.register-buttons {
+  display: flex;
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.cancel-button,
+.submit-button {
+  flex: 1;
+  height: 56px;
+  border: none;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.cancel-button {
+  background: #E0E0E0;
+  color: #757575;
+}
+
+.cancel-button:hover {
+  background: #BDBDBD;
+}
+
+.cancel-button:active {
+  background: #9E9E9E;
+}
+
+.submit-button {
+  background: #66BB6A;
+  color: white;
+}
+
+.submit-button:hover:not(:disabled) {
+  background: #4CAF50;
+}
+
+.submit-button:active:not(:disabled) {
+  background: #43A047;
+}
+
+.submit-button:disabled {
+  background: #BDBDBD;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 响应式设计 */
+@media (max-width: 480px) {
+  .logo-circle {
+    width: 300px;
+    height: 300px;
+  }
+  
+  .logo-image {
+    width: 260px;
+    height: 260px;
+  }
+  
+  .toolbar-title {
+    font-size: 20px;
+  }
+}
+</style>
