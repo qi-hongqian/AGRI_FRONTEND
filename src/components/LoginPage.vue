@@ -61,15 +61,18 @@
             class="input-field"
           />
           <!-- 验证码图片 -->
-          <img 
-            v-if="captchaImage" 
-            :src="captchaImage" 
-            alt="验证码" 
-            class="captcha-image" 
-            @click="refreshCaptcha"
-            :title="'点击刷新验证码'"
-          />
-          <div v-else class="captcha-loading">加载中...</div>
+          <div v-if="captchaImage" class="captcha-wrapper">
+            <img 
+              :src="captchaImage" 
+              alt="验证码" 
+              class="captcha-image" 
+              @click="refreshCaptchaImage"
+              :title="'点击刷新验证码'"
+            />
+          </div>
+          <button v-else type="button" class="captcha-loading-btn" @click="loadCaptchaIfNeeded" :disabled="loadingCaptcha">
+            {{ loadingCaptcha ? '加载中...' : '点击加载验证码' }}
+          </button>
         </div>
 
         <!-- 注册链接 -->
@@ -85,6 +88,11 @@
         <!-- 登录按钮 -->
         <button class="login-button" @click="handleLogin" :disabled="loginLoading">
           {{ loginLoading ? '登录中...' : '登录' }}
+        </button>
+
+        <!-- 一键登录按钮 (测试用) -->
+        <button class="quick-login-button" @click="quickLogin" :disabled="quickLoginLoading">
+          {{ quickLoginLoading ? '登录中...' : '一键登录(测试)' }}
         </button>
       </div>
 
@@ -202,6 +210,8 @@ const isRegister = ref(false)
 const time = ref('')
 const loginLoading = ref(false)
 const loginError = ref('')
+const loadingCaptcha = ref(false)  // 验证码加载中状态
+const quickLoginLoading = ref(false)  // 一键登录加载中状态
 
 // 注册表单数据
 const registerData = ref({
@@ -214,8 +224,10 @@ const registerLoading = ref(false)
 const registerError = ref('')
 const avatarFile = ref(null)  // 头像文件
 const avatarFileName = ref('')  // 头像文件名
-const tempAvatarUrl = ref('')  // 临时头像URL（后端返回）
-const avatarPreviewUrl = ref('')  // 头像预览URL（完整路径）
+const tempAvatarUrl = ref('')  // 临时头像 URL（后端返回）
+const avatarPreviewUrl = ref('')  // 头像预览 URL（完整路径）
+const allTempAvatars = ref([])  // 所有临时头像 URL 数组
+const selectedAvatarUrl = ref('')  // 最终选择的头像 URL
 
 // 计算属性 - 空的，不再使用角色切换
 
@@ -229,33 +241,56 @@ const refreshCaptcha = async (phoneNumber = '') => {
   }
   
   try {
+    loadingCaptcha.value = true
     loginError.value = ''
-    console.log('[开始加载验证码]', { phone: phoneToUse })
+    console.log('[\u5f00\u59cb\u52a0\u8f7d\u9a8c\u8bc1\u7801]', { phone: phoneToUse })
     
     const response = await api.user.getCaptcha(phoneToUse)
     
-    console.log('[验证码响应]', response)
+    console.log('[\u9a8c\u8bc1\u7801\u54cd\u5e94]', response)
     
     if (response.success) {
-      // 检查响应结构，不同的后端可能返回不同的字段
+      // \u68c0\u67e5\u54cd\u5e94\u7ed3\u6784\uff0c\u4e0d\u540c\u7684\u540e\u7aef\u53ef\u80fd\u8fd4\u56de\u4e0d\u540c\u7684\u5b57\u6bb5
       const captchaImageData = response.captchaImage || response.data?.captchaImage
       
       if (captchaImageData) {
         captchaImage.value = captchaImageData
         captcha.value = ''
-        console.log('[验证码图片加载成功]')
+        console.log('[\u9a8c\u8bc1\u7801\u56fe\u7247\u52a0\u8f7d\u6210\u529f]')
       } else {
-        loginError.value = '验证码数据不合法'
-        console.error('[验证码数据结构异常]', response)
+        loginError.value = '\u9a8c\u8bc1\u7801\u6570\u636e\u4e0d\u5408\u6cd5'
+        console.error('[\u9a8c\u8bc1\u7801\u6570\u636e\u7ed3\u6784\u5f02\u5e38]', response)
       }
     } else {
-      loginError.value = response.message || '获取验证码失败'
-      console.error('[验证码请求失败]', response.message)
+      loginError.value = response.message || '\u83b7\u53d6\u9a8c\u8bc1\u7801\u5931\u8d25'
+      console.error('[\u9a8c\u8bc1\u7801\u8bf7\u6c42\u5931\u8d25]', response.message)
     }
   } catch (error) {
-    console.error('[验证码加载错误]', error)
-    loginError.value = '获取验证码失败，请检查网络连接'
+    console.error('[\u9a8c\u8bc1\u7801\u52a0\u8f7d\u9519\u8bef]', error)
+    loginError.value = '\u83b7\u53d6\u9a8c\u8bc1\u7801\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u8fde\u63a5'
+  } finally {
+    loadingCaptcha.value = false
   }
+}
+
+// \u5237\u65b0\u9a8c\u8bc1\u7801\u56fe\u7247\uff08\u5305\u88f9refreshCaptcha\uff09
+const refreshCaptchaImage = async () => {
+  await refreshCaptcha()
+}
+
+// \u5982\u679c\u624b\u673a\u53f7\u6709\u6548\uff0c\u4f1a\u81ea\u52a8\u52a0\u8f7d\u9a8c\u8bc1\u7801\uff0c\u5426\u5219\u8981\u6c42\u7528\u6237\u6b21总\u70b9\u51fb\u52a0\u8f7d
+const loadCaptchaIfNeeded = async () => {
+  const phoneToUse = phone.value
+  if (!phoneToUse.trim()) {
+    loginError.value = '\u8bf7\u5148\u8f93\u5165\u624b\u673a\u53f7'
+    return
+  }
+  const phoneReg = /^1[3-9]\d{9}$/
+  if (!phoneReg.test(phoneToUse)) {
+    loginError.value = '\u624b\u673a\u53f7\u683c\u5f0f\u4e0d\u6b63\u786e'
+    return
+  }
+  await refreshCaptcha(phoneToUse)
 }
 
 // 手机号一样时改变时，随之也自动加载验证码
@@ -381,7 +416,53 @@ const handleLogin = async () => {
   }
 }
 
-// 处理注册
+// 一键登录
+ const quickLogin = async () => {
+  try {
+    quickLoginLoading.value = true
+    loginError.value = ''
+    
+    console.log('[\u4e00键登录\u5f00\u59cb]')
+    
+    // 调\u7528\u540e\u7aef\u7684\u4e00\u952e\u767b\u5f55\u63a5\u53e3
+    const response = await fetch('http://localhost:8081/api/auth/quick-login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    const data = await response.json()
+    
+    console.log('[\u4e00\u952e\u767b\u5f55\u54cd\u5e94]', data)
+    
+    if (data.success) {
+      // \u4fdd\u5b58\u7528\u6237\u4fe1\u606f\u548ctoken\u5230store
+      appStore.setUser({
+        ...data.user,
+        token: data.token
+      })
+      
+      console.log('[\u4e00\u952e\u767b\u5f55\u6210\u529f]', {
+        user: data.user,
+        token: data.token
+      })
+      
+      // \u8df3\u8f6c\u5230\u9996\u9875
+      router.push('/home')
+    } else {
+      loginError.value = data.message || '\u4e00\u952e\u767b\u5f55\u5931\u8d25'
+      console.error('[\u4e00\u952e\u767b\u5f55\u5931\u8d25]', data.message)
+    }
+  } catch (error) {
+    console.error('[\u4e00\u952e\u767b\u5f55\u9519\u8bef]:', error)
+    loginError.value = '\u4e00\u952e\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u8fde\u63a5'
+  } finally {
+    quickLoginLoading.value = false
+  }
+}
+
+// \u5904\u7406\u6ce8\u518c
 const handleRegister = () => {
   isRegister.value = true
   registerError.value = ''
@@ -389,12 +470,12 @@ const handleRegister = () => {
 
 // 取消注册
 const cancelRegister = async () => {
-  // 如果有临时头像，删除它
-  if (tempAvatarUrl.value) {
+  // 如果有临时头像，批量删除（包括选中的，因为是异常关闭）
+  if (allTempAvatars.value.length > 0) {
     try {
-      console.log('[删除临时头像]', tempAvatarUrl.value)
-      await api.user.deleteTempAvatar(tempAvatarUrl.value)
-      console.log('[临时头像已删除]')
+      console.log('[异常关闭：批量删除所有临时头像]', allTempAvatars.value)
+      await api.user.deleteTempAvatarBatch(allTempAvatars.value)
+      console.log('[所有临时头像已删除]')
     } catch (error) {
       console.error('[删除临时头像失败]', error)
     }
@@ -412,6 +493,8 @@ const cancelRegister = async () => {
   avatarFileName.value = ''
   tempAvatarUrl.value = ''
   avatarPreviewUrl.value = ''
+  allTempAvatars.value = []
+  selectedAvatarUrl.value = ''
 }
 
 const avatarInput = ref(null)  // 文件输入DOM
@@ -433,7 +516,7 @@ const handleAvatarChange = async (event) => {
   }
   // 验证文件大小（最大 2MB）
   if (file.size > 2 * 1024 * 1024) {
-    registerError.value = '头像文件大小不能超过2MB'
+    registerError.value = '头像文件大小不能超过 2MB'
     return
   }
   
@@ -444,16 +527,25 @@ const handleAvatarChange = async (event) => {
   try {
     console.log('[开始上传临时头像]', file.name)
     
-    // 立即上传到后端获取临时URL
+    // 立即上传到后端获取临时 URL
     const response = await api.user.uploadTempAvatar(file)
     const data = response.data || response
     
     if (data.success && data.avatarUrl) {
-      tempAvatarUrl.value = data.avatarUrl
-      avatarPreviewUrl.value = `http://localhost:8081${data.avatarUrl}`
+      const newTempUrl = data.avatarUrl
+      
+      // 添加到所有临时头像数组
+      allTempAvatars.value.push(newTempUrl)
+      
+      // 设置当前选择的头像
+      selectedAvatarUrl.value = newTempUrl
+      tempAvatarUrl.value = newTempUrl
+      avatarPreviewUrl.value = `http://localhost:8081${newTempUrl}`
+      
       console.log('[临时头像上传成功]', {
-        tempUrl: tempAvatarUrl.value,
-        previewUrl: avatarPreviewUrl.value
+        newTempUrl,
+        allTempAvatars: allTempAvatars.value,
+        selectedAvatarUrl: selectedAvatarUrl.value
       })
     } else {
       registerError.value = data.message || '头像上传失败'
@@ -493,13 +585,14 @@ const submitRegister = async () => {
     formData.append('password', registerData.value.password)
     formData.append('nickname', registerData.value.nickname)
     
-    // 传递已上传的头像URL（而不是文件）
-    formData.append('avatarUrl', tempAvatarUrl.value || '')
-    
+    // 传递已上传的头像 URL（而不是文件）
+    formData.append('avatarUrl', selectedAvatarUrl.value || '')
+        
     console.log('[注册请求]', {
       phone: registerData.value.phone,
       nickname: registerData.value.nickname,
-      avatarUrl: tempAvatarUrl.value || '无'
+      avatarUrl: selectedAvatarUrl.value || '无',
+      allTempAvatars: allTempAvatars.value
     })
     
     // 调用注册 API
@@ -509,10 +602,28 @@ const submitRegister = async () => {
     
     // 直接 axios 返回的是 response 对象，数据在 response.data 中
     const data = response.data || response
-    
+        
     if (data.success) {
       console.log('注册成功', data.user)
-      tempAvatarUrl.value = ''  // 清空临时URL，注册成功后不需要删除
+          
+      // 批量删除未使用的临时头像（不包括选中的头像）
+      const unusedAvatars = allTempAvatars.value.filter(url => url !== selectedAvatarUrl.value)
+      if (unusedAvatars.length > 0) {
+        try {
+          console.log('[开始删除未使用的临时头像]', unusedAvatars)
+          // 注意：不删除 selectedAvatarUrl，后端会将它重新命名为正式头像
+          await api.user.deleteTempAvatarBatch(unusedAvatars)
+          console.log('[未使用的临时头像删除成功]')
+        } catch (error) {
+          console.error('[删除临时头像失败]', error)
+        }
+      }
+          
+      // 清空所有临时数据
+      allTempAvatars.value = []
+      selectedAvatarUrl.value = ''
+      tempAvatarUrl.value = ''
+          
       alert('注册成功，请登录')
       cancelRegister()
     } else {
@@ -561,10 +672,17 @@ onMounted(() => {
 
 // 页面关闭前的处理
 const handleBeforeUnload = () => {
-  if (tempAvatarUrl.value) {
+  if (allTempAvatars.value.length > 0) {
     // 使用 keepalive 确保请求在页面关闭后继续
-    fetch(`http://localhost:8081/api/user/avatar/temp-delete?avatarUrl=${encodeURIComponent(tempAvatarUrl.value)}`, {
-      method: 'DELETE',
+    // 异常关闭时删除所有临时头像（包括选中的）
+    fetch('http://localhost:8081/api/user/avatar/temp-delete-batch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        avatarUrls: allTempAvatars.value  // 删除所有，包括 selectedAvatarUrl
+      }),
       keepalive: true
     })
   }
@@ -579,10 +697,10 @@ onUnmounted(() => {
   // 移除页面关闭监听
   window.removeEventListener('beforeunload', handleBeforeUnload)
   
-  // 如果有临时头像，删除它
-  if (tempAvatarUrl.value) {
-    api.user.deleteTempAvatar(tempAvatarUrl.value).catch(err => {
-      console.error('[卸载时删除临时头像失败]', err)
+  // 如果有临时头像，批量删除所有（包括选中的，因为是异常卡錀）
+  if (allTempAvatars.value.length > 0) {
+    api.user.deleteTempAvatarBatch(allTempAvatars.value).catch(err => {
+      console.error('[卸载时批量删除临时头像失败]', err)
     })
   }
 })
@@ -874,11 +992,61 @@ onUnmounted(() => {
   border-radius: 4px;
   margin-left: 8px;
   cursor: pointer;
-  transition: opacity 0.3s;
+  transition: all 0.3s;
+  user-select: none;
 }
 
 .captcha-image:hover {
-  opacity: 0.8;
+  opacity: 0.7;
+  transform: scale(1.02);
+}
+
+.captcha-image:active {
+  transform: scale(0.98);
+}
+
+/* 验证码包裹 */
+.captcha-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.captcha-tip {
+  font-size: 12px;
+  color: #999;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* 验证码加载按饁 */
+.captcha-loading-btn {
+  background: #66BB6A;
+  color: white;
+  border: none;
+  padding: 10px 12px;
+  border-radius: 4px;
+  margin-left: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+
+.captcha-loading-btn:hover:not(:disabled) {
+  background: #4CAF50;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(102, 187, 106, 0.3);
+}
+
+.captcha-loading-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.captcha-loading-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* 验证码加载提示 */
@@ -981,7 +1149,36 @@ onUnmounted(() => {
   opacity: 0.6;
 }
 
-/* 注册按钮样式 */
+/* 一\u952e\u767b\u5f55\u6309钮 */
+.quick-login-button {
+  width: 100%;
+  height: 48px;
+  background: #FFA726;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: background 0.3s ease;
+}
+
+.quick-login-button:hover:not(:disabled) {
+  background: #FF7043;
+}
+
+.quick-login-button:active:not(:disabled) {
+  background: #E64A19;
+}
+
+.quick-login-button:disabled {
+  background: #BDBDBD;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 注\u518c\u6309钮\u6837\u5f0f */
 .register-buttons {
   display: flex;
   gap: 16px;

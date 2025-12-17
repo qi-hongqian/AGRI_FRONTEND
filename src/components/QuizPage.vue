@@ -434,10 +434,11 @@ export default {
 
 <style scoped>
 .quiz-page {
-  min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background-attachment: fixed;  /* 使渐变背景固定在视口 */
+  min-height: 100vh;  /* 确保页面至少占满整个视口高度 */
   padding: 20px;
-  padding-bottom: 80px;
+  padding-bottom: 50px;  /* 增加底部间距 */
 }
 
 .page-header {

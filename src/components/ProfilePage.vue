@@ -4,12 +4,23 @@
     <div class="profile-header">
       <!-- 用户头像 -->
       <div class="avatar-section">
-        <div class="avatar-circle">
+        <div class="avatar-circle" @click="triggerAvatarInput" :class="{ 'avatar-editable': true }">
           <img v-if="user.avatar" :src="avatarUrl" :alt="user.nickname" class="avatar-image" />
           <div v-else class="avatar-placeholder">
             <i>👤</i>
           </div>
+          <div class="avatar-overlay">
+            <span class="overlay-text">📷 修改</span>
+          </div>
         </div>
+        <input 
+          ref="avatarInput"
+          type="file" 
+          accept="image/*"
+          @change="handleAvatarChange"
+          class="avatar-file-input"
+          style="display: none"
+        />
       </div>
 
       <!-- 用户基本信息 -->
@@ -17,7 +28,13 @@
         <h2 class="user-nickname">{{ user.nickname }}</h2>
         <p class="user-phone">
           <span class="label">手机号：</span>
-          <span class="value">{{ maskPhone(user.phone) }}</span>
+          <span class="value">{{ phoneDisplay }}</span>
+          <img 
+            :src="eyeIconUrl" 
+            alt="toggle visibility" 
+            class="eye-icon" 
+            @click="togglePhoneVisibility"
+          >
         </p>
         <div class="user-meta">
           <span class="user-id">ID: {{ user.id }}</span>
@@ -103,9 +120,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
+import api from '../api/index.js'
+import eyesOpenIcon from '@/assets/icon/eyes_open.png'
+import eyesCloseIcon from '@/assets/icon/eyes_close.png'
 
 const router = useRouter()
 const appStore = useAppStore()
+const avatarInput = ref(null)
+const isUploadingAvatar = ref(false)
 
 // 用户信息
 const user = ref({
@@ -115,6 +137,25 @@ const user = ref({
   avatar: '',
   role: 'user'
 })
+
+// 控制手机号显示状态
+const isPhoneVisible = ref(false)
+
+// 眼睛图标URL
+const eyeIconUrl = computed(() => {
+  return isPhoneVisible.value ?  eyesOpenIcon : eyesCloseIcon
+})
+
+// 计算显示的手机号
+const phoneDisplay = computed(() => {
+  if (!user.value.phone) return ''
+  return isPhoneVisible.value ? user.value.phone : maskPhone(user.value.phone)
+})
+
+// 切换手机号显示状态
+const togglePhoneVisibility = () => {
+  isPhoneVisible.value = !isPhoneVisible.value
+}
 
 // 计算头像URL
 const avatarUrl = computed(() => {
@@ -197,12 +238,78 @@ const handleLogout = async () => {
     try {
       // 清除用户信息和token
       appStore.logout()
-      console.log('[登出成功]')
-      // 重定向到登录页
+      console.log('[\u767b出成功]')
+      // 重定向到\u767b\u5f55\u9875
       router.push('/login')
     } catch (error) {
-      console.error('[登出失败]', error)
-      alert('登出失败，请重试')
+      console.error('[\u767b出失败]', error)
+      alert('\u767b出失败，请重试')
+    }
+  }
+}
+
+// 打开头像文\u4ef6\u9009择
+const triggerAvatarInput = () => {
+  avatarInput.value?.click()
+}
+
+// 处理头像改变
+const handleAvatarChange = async (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+  
+  // 验证文件类丛
+  if (!file.type.startsWith('image/')) {
+    alert('请选择图片文件')
+    return
+  }
+  
+  // 验证文件大小 (最大 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    alert('图片大小不能超过 5MB')
+    return
+  }
+  
+  try {
+    isUploadingAvatar.value = true
+    console.log('[开始上传头像]', file.name)
+    
+    // 调用更新头像接口(需要Token)
+    const response = await api.user.updateAvatar(file)
+    
+    console.log('[头像上传响应]', response)
+    
+    if (response.success) {
+      const newAvatarUrl = response.avatarUrl || response.url
+      
+      if (newAvatarUrl) {
+        // 更新本地用户信息
+        user.value.avatar = newAvatarUrl
+        
+        // 更新 store 中的用户信息
+        appStore.setUser({
+          ...appStore.user,
+          avatar: newAvatarUrl
+        })
+        
+        console.log('[头像上传成功]', newAvatarUrl)
+        alert('头像上传成功')
+      } else {
+        console.error('[头像响应字段不正常]', response)
+        alert('头像上传失败，请重试')
+      }
+    } else {
+      console.error('[头像上传失败]', response.message)
+      alert(response.message || '头像上传失败')
+    }
+  } catch (error) {
+    console.error('[头像上传错误]', error)
+    alert('头像上传失败，请检查网络连接')
+  } finally {
+    isUploadingAvatar.value = false
+    // 清除文件输入（为了下次是不是的处理）
+    if (avatarInput.value) {
+      avatarInput.value.value = ''
     }
   }
 }
@@ -210,9 +317,8 @@ const handleLogout = async () => {
 
 <style scoped>
 .profile-container {
-  min-height: 100vh;
   background: linear-gradient(to bottom, #FAF8F0, #FFFFFF);
-  padding-bottom: 70px; /* 为底部导航留空间 */
+  padding-bottom: 30px;  /* 增加底部间距 */
 }
 
 /* 顶部信息区域 */
@@ -238,6 +344,18 @@ const handleLogout = async () => {
   border: 5px solid white;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
   background: white;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.avatar-circle.avatar-editable:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.avatar-circle.avatar-editable:active {
+  transform: scale(0.98);
 }
 
 .avatar-image {
@@ -254,6 +372,37 @@ const handleLogout = async () => {
   justify-content: center;
   font-size: 60px;
   background: #E8F5E9;
+}
+
+/* 头像覆盖层 */
+.avatar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 50%;
+}
+
+.avatar-circle:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.overlay-text {
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.avatar-file-input {
+  display: none;
 }
 
 /* 用户信息区域 */
@@ -273,6 +422,10 @@ const handleLogout = async () => {
   font-size: 14px;
   margin: 0 0 12px 0;
   opacity: 0.95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
 .label {
@@ -281,6 +434,14 @@ const handleLogout = async () => {
 
 .value {
   font-weight: 500;
+}
+
+.eye-icon {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  margin-left: 8px;
+  user-select: none;
 }
 
 .user-meta {
@@ -335,6 +496,7 @@ const handleLogout = async () => {
 /* 菜单区域 */
 .menu-section {
   padding: 16px;
+  padding-bottom: 40px;  /* 为loigout-section 提供足够空间 */
 }
 
 .menu-group {

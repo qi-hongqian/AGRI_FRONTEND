@@ -279,11 +279,9 @@ export default {
 <style scoped>
 /* 确保组件内容正确显示 */
 .home-page {
-  min-height: 100vh;
   background-color: #f5f5f5;
-  padding-bottom: 60px;
-  overflow-y: auto;
   position: relative;
+  padding-bottom: 30px;  /* 增加底部间距 */
 }
 
 /* 应用标题样式 - 固定显示 */
@@ -619,6 +617,7 @@ export default {
 .news-list {
   display: grid;
   gap: 20px;
+  margin-bottom: 50px;  
 }
 
 .news-item {

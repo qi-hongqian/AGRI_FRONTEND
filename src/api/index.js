@@ -174,7 +174,7 @@ export default {
       })
     },
     
-    // 临时上传头像 - 立即上传获取预览URL
+    // 临时上传头像（注册前预览用）- 不需要Token
     uploadTempAvatar: (file) => {
       const formData = new FormData()
       formData.append('avatar', file)
@@ -185,9 +185,31 @@ export default {
       })
     },
     
-    // 删除临时头像
+    // 更新头像（登录后修改用）- 需要Token
+    updateAvatar: (file) => {
+      const formData = new FormData()
+      formData.append('avatar', file)
+      return apiClient.post('/api/user/avatar/update', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+    },
+    
+    // 删除临时头像（单个）
     deleteTempAvatar: (avatarUrl) => {
       return axios.delete(`http://localhost:8081/api/user/avatar/temp-delete?avatarUrl=${encodeURIComponent(avatarUrl)}`)
+    },
+    
+    // 批量删除临时头像
+    deleteTempAvatarBatch: (avatarUrls) => {
+      return axios.post('http://localhost:8081/api/user/avatar/temp-delete-batch', {
+        avatarUrls
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
     },
     
     getProfile: (userId) => 
@@ -195,11 +217,8 @@ export default {
     
     updateProfile: (profileData) => 
       userAPI.put('/api/user/profile', profileData),
-    
-    updateAvatar: (avatarUrl) => 
-      userAPI.post('/api/user/avatar', { avatarUrl }),
-    
-    // 获取验证码 - GET请求，参数作为URL查询参数
+        
+    // 获取验证码 - GET请求。参数作URL查询参数
     getCaptcha: (phone) => 
       userAPI.get('/api/auth/captcha', { phone })
   },
