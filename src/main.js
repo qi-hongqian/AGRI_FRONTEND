@@ -10,6 +10,11 @@ import HomePage from './components/HomePage.vue'
 import QuizPage from './components/QuizPage.vue'
 import ProfilePage from './components/ProfilePage.vue'
 import UserInfoPage from './components/UserInfoPage.vue'
+import ForumPage from './components/ForumPage.vue'
+import PostListPage from './components/PostListPage.vue'
+import PostDetailPage from './components/PostDetailPage.vue'
+import CreatePostPage from './components/CreatePostPage.vue'
+import EditPostPage from './components/EditPostPage.vue'
 
 // 创建Pinia实例
 const pinia = createPinia()
@@ -45,7 +50,27 @@ const routes = [
   { 
     path: '/forum', 
     name: 'Forum',
-    component: EmptyPage
+    component: ForumPage
+  },
+  { 
+    path: '/forum/category/:categoryId', 
+    name: 'PostList',
+    component: PostListPage
+  },
+  { 
+    path: '/forum/post/:id', 
+    name: 'PostDetail',
+    component: PostDetailPage
+  },
+  { 
+    path: '/forum/create', 
+    name: 'CreatePost',
+    component: CreatePostPage
+  },
+  { 
+    path: '/forum/post/:id/edit', 
+    name: 'EditPost',
+    component: EditPostPage
   },
   { 
     path: '/mall', 

@@ -106,6 +106,12 @@
       <div class="menu-group">
         <h3 class="group-title">其他</h3>
         <div class="menu-list">
+          <!-- 环境切换 -->
+          <div class="menu-item" @click="toggleEnv">
+            <span class="menu-icon">🌐</span>
+            <span class="menu-text">环境切换: {{ currentEnvDisplay }}</span>
+            <span class="menu-arrow">›</span>
+          </div>
           <div class="menu-item" @click="handleMenuClick('aboutApp')">
             <span class="menu-icon">ℹ️</span>
             <span class="menu-text">关于应用</span>
@@ -133,6 +139,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
+import { getEnvConfig, getCurrentEnv, setEnv } from '../config/env'
 import api from '../api/index.js'
 import eyesOpenIcon from '@/assets/icon/eyes_open.png'
 import eyesCloseIcon from '@/assets/icon/eyes_close.png'
@@ -181,7 +188,8 @@ const avatarUrl = computed(() => {
   if (!user.value.avatar) return ''
   // 如果是相对路径，添加基础URL
   if (user.value.avatar.startsWith('/')) {
-    return `http://localhost:8081${user.value.avatar}`
+    const envConfig = getEnvConfig()
+    return `${envConfig.USER_API}${user.value.avatar}`
   }
   return user.value.avatar
 })
@@ -196,10 +204,28 @@ const roleText = computed(() => {
   return roleMap[user.value.role] || user.value.role
 })
 
-// 隐藏手机号中闔部分
+// 汚柩住客户紙第一揉强国版
 const maskPhone = (phone) => {
   if (!phone) return ''
   return phone.slice(0, 3) + '****' + phone.slice(7)
+}
+
+// 当前环境显示文本
+const currentEnvDisplay = computed(() => {
+  const env = getCurrentEnv()
+  return env === 'development' ? '本地 (localhost)' : '测试 (IP)'
+})
+
+// 切换环境
+const toggleEnv = () => {
+  const currentEnv = getCurrentEnv()
+  const nextEnv = currentEnv === 'development' ? 'testing' : 'development'
+  const envName = nextEnv === 'development' ? '本地开发环境' : '测试环境'
+  
+  if (confirm(`确定要切换到${envName}吗？应用将会刷新。`)) {
+    console.log(`[环境切换] ${currentEnv} -> ${nextEnv}`)
+    setEnv(nextEnv)
+  }
 }
 
 // 计算信息完成度级别

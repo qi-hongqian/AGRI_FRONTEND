@@ -77,6 +77,9 @@
 
         <!-- 注册链接 -->
         <div class="register-link">
+          <button class="env-switch-btn" @click="toggleEnv" :title="'当前: ' + currentEnvDisplay">
+            🌐 {{ currentEnvDisplay }}
+          </button>
           <span @click="handleRegister" class="register-text">立即注册</span>
         </div>
 
@@ -195,6 +198,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
 import { useAppStore } from '../stores/app'
+import { getEnvConfig, getCurrentEnv, setEnv } from '../config/env'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -425,7 +429,8 @@ const handleLogin = async () => {
     console.log('[\u4e00键登录\u5f00\u59cb]')
     
     // 调\u7528\u540e\u7aef\u7684\u4e00\u952e\u767b\u5f55\u63a5\u53e3
-    const response = await fetch('http://localhost:8081/api/auth/quick-login', {
+    const envConfig = getEnvConfig()
+    const response = await fetch(`${envConfig.USER_API}/api/auth/quick-login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -466,6 +471,24 @@ const handleLogin = async () => {
 const handleRegister = () => {
   isRegister.value = true
   registerError.value = ''
+}
+
+// 当前环境显示文本
+const currentEnvDisplay = computed(() => {
+  const env = getCurrentEnv()
+  return env === 'development' ? '本地 (localhost)' : '测试 (IP)'
+})
+
+// 切换环境
+const toggleEnv = () => {
+  const currentEnv = getCurrentEnv()
+  const nextEnv = currentEnv === 'development' ? 'testing' : 'development'
+  const envName = nextEnv === 'development' ? '本地开发环境' : '测试环境'
+  
+  if (confirm(`确定要切换到${envName}吗？应用将会刷新。`)) {
+    console.log(`[环境切换] ${currentEnv} -> ${nextEnv}`)
+    setEnv(nextEnv)
+  }
 }
 
 // 取消注册
@@ -540,7 +563,8 @@ const handleAvatarChange = async (event) => {
       // 设置当前选择的头像
       selectedAvatarUrl.value = newTempUrl
       tempAvatarUrl.value = newTempUrl
-      avatarPreviewUrl.value = `http://localhost:8081${newTempUrl}`
+      const envConfig = getEnvConfig()
+      avatarPreviewUrl.value = `${envConfig.USER_API}${newTempUrl}`
       
       console.log('[临时头像上传成功]', {
         newTempUrl,
@@ -673,9 +697,10 @@ onMounted(() => {
 // 页面关闭前的处理
 const handleBeforeUnload = () => {
   if (allTempAvatars.value.length > 0) {
-    // 使用 keepalive 确保请求在页面关闭后继续
+    const envConfig = getEnvConfig()
+    // 使用 keepalive 确保请求在页面关闭后继纻
     // 异常关闭时删除所有临时头像（包括选中的）
-    fetch('http://localhost:8081/api/user/avatar/temp-delete-batch', {
+    fetch(`${envConfig.USER_API}/api/user/avatar/temp-delete-batch`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1086,6 +1111,24 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 500;
   cursor: pointer;
+}
+
+/* 环境切换按针 */
+.env-switch-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 12px 0 0;
+  margin-right: 12px;
+  transition: all 0.3s ease;
+  border-right: 1px solid #ddd;
+}
+
+.env-switch-btn:hover {
+  color: #66BB6A;
+  transform: scale(1.05);
 }
 
 /* 角色切换 */
