@@ -9,6 +9,7 @@ import LoginPage from './components/LoginPage.vue'
 import HomePage from './components/HomePage.vue'
 import QuizPage from './components/QuizPage.vue'
 import ProfilePage from './components/ProfilePage.vue'
+import UserInfoPage from './components/UserInfoPage.vue'
 
 // 创建Pinia实例
 const pinia = createPinia()
@@ -60,6 +61,11 @@ const routes = [
     path: '/profile', 
     name: 'Profile',
     component: ProfilePage
+  },
+  { 
+    path: '/user-info', 
+    name: 'UserInfo',
+    component: UserInfoPage
   }
 ]
 

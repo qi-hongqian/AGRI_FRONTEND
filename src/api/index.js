@@ -217,6 +217,34 @@ export default {
     
     updateProfile: (profileData) => 
       userAPI.put('/api/user/profile', profileData),
+    
+    // 获取性别选项
+    getGenderOptions: () => 
+      userAPI.get('/api/user/gender/options'),
+    
+    // 获取省份列表
+    getProvinces: () => 
+      userAPI.get('/api/user/region/provinces'),
+    
+    // 获取城市列表
+    getCities: (provinceId) => 
+      userAPI.get(`/api/user/region/cities/${provinceId}`),
+    
+    // 获取区县列表
+    getDistricts: (cityId) => 
+      userAPI.get(`/api/user/region/districts/${cityId}`),
+    
+    // 填写/更新个人信息
+    fillUserInfo: (userInfoData) => 
+      userAPI.post('/api/user/info/fill', userInfoData),
+    
+    // 获取用户个人信息
+    getUserInfo: () => 
+      userAPI.get('/api/user/info'),
+    
+    // 获取用户个人信息（编辑页面用，包含选项和已选值）
+    getEditUserInfo: () => 
+      userAPI.get('/api/user/info/edit'),
         
     // 获取验证码 - GET请求。参数作URL查询参数
     getCaptcha: (phone) => 

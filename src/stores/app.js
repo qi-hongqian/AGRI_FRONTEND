@@ -5,6 +5,7 @@ export const useAppStore = defineStore('app', {
     // 用户状态
     user: null,
     token: localStorage.getItem('token') || null,
+    infoCompletionRate: 0,  // 添加：缓存信息完成度
     
     // 微服务状态
     activeModule: 'home',
@@ -57,8 +58,15 @@ export const useAppStore = defineStore('app', {
     logout() {
       this.user = null
       this.token = null
+      this.infoCompletionRate = 0  // 添加：登出时清除完成度
       localStorage.removeItem('token')
       this.clearAllModuleData()
+    },
+    
+    // 添加：设置信息完成度
+    setInfoCompletionRate(rate) {
+      this.infoCompletionRate = rate
+      console.log('[Store] 更新信息完成度:', rate + '%')
     },
     
     // 微服务状态管理

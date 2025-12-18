@@ -39,6 +39,19 @@
         <div class="user-meta">
           <span class="user-id">ID: {{ user.id }}</span>
           <span class="user-role">{{ roleText }}</span>
+          <span 
+            v-if="!isLoading"
+            class="info-completion" 
+            :class="`completion-${getCompletionLevel()}`"
+          >
+            信息完成度: {{ infoCompletionRate }}%
+          </span>
+          <span 
+            v-else
+            class="info-completion info-loading"
+          >
+            加载中...
+          </span>
         </div>
       </div>
 
@@ -138,6 +151,12 @@ const user = ref({
   role: 'user'
 })
 
+// 状态
+// 添加：如果已有缓存，初始化为 false，避免闪烁
+const isLoading = ref(appStore.infoCompletionRate === 0)
+// 从 Store 中取值，或使用存储的值
+const infoCompletionRate = computed(() => appStore.infoCompletionRate)
+
 // 控制手机号显示状态
 const isPhoneVisible = ref(false)
 
@@ -177,10 +196,22 @@ const roleText = computed(() => {
   return roleMap[user.value.role] || user.value.role
 })
 
-// 隐藏手机号中间部分
+// 隐藏手机号中闔部分
 const maskPhone = (phone) => {
   if (!phone) return ''
   return phone.slice(0, 3) + '****' + phone.slice(7)
+}
+
+// 计算信息完成度级别
+const getCompletionLevel = () => {
+  const rate = infoCompletionRate.value
+  if (rate < 40) {
+    return 'low'      // 红色 - 信息不上
+  } else if (rate < 80) {
+    return 'medium'   // 黄色 - 信息有所不足
+  } else {
+    return 'high'     // 绿色 - 信息完整
+  }
 }
 
 // 页面加载时获取用户信息
@@ -189,21 +220,50 @@ onMounted(() => {
 })
 
 // 加载用户信息
-const loadUserInfo = () => {
-  const userData = appStore.user
-  if (userData) {
-    user.value = {
-      id: userData.id,
-      phone: userData.phone,
-      nickname: userData.nickname,
-      avatar: userData.avatar,
-      role: userData.role || 'user'
+const loadUserInfo = async () => {
+  try {
+    const userData = appStore.user
+    if (userData) {
+      user.value = {
+        id: userData.id,
+        phone: userData.phone,
+        nickname: userData.nickname,
+        avatar: userData.avatar,
+        role: userData.role || 'user'
+      }
+      console.log('[个人页面] 加载用户信息:', user.value)
+      
+      // 获取信息完成度
+      const res = await api.user.getEditUserInfo()
+      console.log('[\u4e2a\u4eba\u9875\u9762] API\u54cd\u5e94:', res)
+      if (res.success && res.data) {
+        // \u6839\u636e\u7528\u6237\u4fe1\u606f\u8ba1\u7b97\u5b8c\u6210\u5ea6
+        let completedCount = 0
+        const totalFields = 5 // \u771f\u5b9e\u59d3\u540d\u3001\u6027\u522b\u3001\u804c\u4e1a\u3001\u5730\u533a\u3001\u4e2a\u4eba\u7b80\u4ecb
+                    
+        if (res.data.realName) completedCount++
+        if (res.data.gender) completedCount++
+        if (res.data.profession) completedCount++
+        if (res.data.region && res.data.region.provinceId) completedCount++
+        if (res.data.introduction) completedCount++
+                    
+        const rate = Math.round((completedCount / totalFields) * 100)
+        console.log('[\u4e2a\u4eba\u9875\u9762] \u8ba1\u7b97\u5b8c\u6210\u5ea6:', completedCount, '/', totalFields, '=', rate + '%')
+        // \u4fdd\u5b58\u5230 Store \u4e2d\uff0c\u4ee5\u4fbf\u5176\u4ed6\u9875\u9762\u53ef\u4ee5\u76f4\u63a5\u4f7f\u7528
+        appStore.setInfoCompletionRate(rate)
+      } else {
+        console.warn('[\u4e2a\u4eba\u9875\u9762] API\u8fd4\u56de\u6570\u636e\u5f02\u5e38:', res)
+      }
+    } else {
+      console.warn('[个人页面] 用户信息没找到')
+      // 如果没有用户信息，重定向到登录页
+      router.push('/login')
     }
-    console.log('[个人页面] 加载用户信息:', user.value)
-  } else {
-    console.warn('[个人页面] 用户信息未找到')
-    // 如果没有用户信息，重定向到登录页
-    router.push('/login')
+  } catch (error) {
+    console.error('[个人页面] 获取信息完成度失败:', error)
+    // 失败时使用上次缓存的值，或默认0
+  } finally {
+    isLoading.value = false  // 结束加载
   }
 }
 
@@ -227,9 +287,8 @@ const handleMenuClick = (action) => {
 // 前往编辑个人信息
 const goToEditProfile = () => {
   console.log('[编辑个人信息]')
-  alert('编辑个人信息功能开发中...')
-  // TODO: 导航到编辑个人信息页面
-  // router.push('/edit-profile')
+  // 导航到编辑个人信息页面
+  router.push('/user-info')
 }
 
 // 登出账户
@@ -238,17 +297,17 @@ const handleLogout = async () => {
     try {
       // 清除用户信息和token
       appStore.logout()
-      console.log('[\u767b出成功]')
-      // 重定向到\u767b\u5f55\u9875
+      console.log('[登出成功]')
+      // 重定向到登录页
       router.push('/login')
     } catch (error) {
-      console.error('[\u767b出失败]', error)
-      alert('\u767b出失败，请重试')
+      console.error('[登出失败]', error)
+      alert('登出失败，请重试')
     }
   }
 }
 
-// 打开头像文\u4ef6\u9009择
+// 打开头像文件选择
 const triggerAvatarInput = () => {
   avatarInput.value?.click()
 }
@@ -307,7 +366,7 @@ const handleAvatarChange = async (event) => {
     alert('头像上传失败，请检查网络连接')
   } finally {
     isUploadingAvatar.value = false
-    // 清除文件输入（为了下次是不是的处理）
+    // 清除文件输入（为了下次不是的处理）
     if (avatarInput.value) {
       avatarInput.value.value = ''
     }
@@ -463,6 +522,50 @@ const handleAvatarChange = async (event) => {
   background: rgba(255, 255, 255, 0.2);
   padding: 4px 12px;
   border-radius: 12px;
+}
+
+/* 信息完成度指示器 */
+.info-completion {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+/* 完成度级别样式 */
+.info-completion.completion-low {
+  background: #ef5350;
+  color: white;
+  box-shadow: 0 2px 8px rgba(239, 83, 80, 0.3);
+}
+
+.info-completion.completion-medium {
+  background: #ffa726;
+  color: white;
+  box-shadow: 0 2px 8px rgba(255, 167, 38, 0.3);
+}
+
+.info-completion.completion-high {
+  background: #66bb6a;
+  color: white;
+  box-shadow: 0 2px 8px rgba(102, 187, 106, 0.3);
+}
+
+/* 加载中状态 */
+.info-completion.info-loading {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.8);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* 编辑按钮 */
