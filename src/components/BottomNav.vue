@@ -46,11 +46,11 @@ export default {
       },
       {
         name: 'mall',
-        title: '商城',
-        path: '/mall',
-        icon: '🛒',
-        iconClass: 'mall-icon',
-        badge: computed(() => appStore.cartItemCount)
+        title: '小农AI',
+        path: '/xiao-nong-ai',
+        icon: '🤖',
+        iconClass: 'ai-icon',
+        badge: null
       },
       {
         name: 'quiz',

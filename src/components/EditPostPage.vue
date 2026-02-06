@@ -140,6 +140,13 @@
         </button>
       </div>
     </div>
+
+    <!-- Toast提示 -->
+    <transition name="toast">
+      <div v-if="showToast" class="toast-container" :class="`toast-${toastType}`">
+        <span class="toast-message">{{ toastMessage }}</span>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -173,6 +180,21 @@ const imagesToDelete = ref([])  // 待删除的图片ID列表
 
 const categoryDropdownOpen = ref(false)
 const selectedCategoryName = ref('')
+
+// Toast提示相关
+const showToast = ref(false)
+const toastMessage = ref('')
+const toastType = ref('success') // 'success' | 'error' | 'info'
+
+// 显示Toast提示
+const displayToast = (message, type = 'success') => {
+  toastMessage.value = message
+  toastType.value = type
+  showToast.value = true
+  setTimeout(() => {
+    showToast.value = false
+  }, 2500)
+}
 
 // 是否可以发布
 const canPublish = computed(() => {
@@ -233,13 +255,13 @@ const loadPostDetail = async () => {
       })
     } else {
       console.error('加载帖子失败:', res.message)
-      alert('加载帖子失败，请重试')
-      router.back()
+      displayToast('加载帖子失败，请重试', 'error')
+      setTimeout(() => router.back(), 1500)
     }
   } catch (error) {
     console.error('加载帖子失败:', error)
-    alert('加载失败，请重试')
-    router.back()
+    displayToast('加载失败，请重试', 'error')
+    setTimeout(() => router.back(), 1500)
   } finally {
     loading.value = false
   }
@@ -260,14 +282,14 @@ const handleImageUpload = async (event) => {
   
   // 检查数量
   if (tempImageUrls.value.length + files.length > maxImages) {
-    alert(`最多只能再上传${maxImages}张图片`)
+    displayToast(`最多只能再上传${maxImages}张图片`, 'info')
     return
   }
   
   // 检查大小
   for (const file of files) {
     if (file.size > 5 * 1024 * 1024) {
-      alert(`图片 ${file.name} 超过5MB，请压缩后上传`)
+      displayToast(`图片 ${file.name} 超过5MB，请压缩后上传`, 'error')
       return
     }
   }
@@ -282,11 +304,11 @@ const handleImageUpload = async (event) => {
       tempImageUrls.value.push(...urls)
       console.log('[EditPostPage] 上传成功，临时URL:', urls)
     } else {
-      alert(res.message || '上传失败')
+      displayToast(res.message || '上传失败', 'error')
     }
   } catch (error) {
     console.error('[EditPostPage] 上传图片错误:', error)
-    alert('上传失败，请重试')
+    displayToast('上传失败，请重试', 'error')
   }
   
   event.target.value = ''
@@ -314,38 +336,38 @@ const handlePublish = async () => {
   
   // 标题验证
   if (!formData.value.title || formData.value.title.trim() === '') {
-    alert('❌ 请输入帖子标题')
+    displayToast('❌ 请输入帖子标题', 'error')
     return
   }
   if (formData.value.title.length > 50) {
-    alert('❌ 标题不能超过50个字')
+    displayToast('❌ 标题不能超过50个字', 'error')
     return
   }
   
   // 内容验证
   if (!formData.value.content || formData.value.content.trim() === '') {
-    alert('❌ 请输入帖子内容')
+    displayToast('❌ 请输入帖子内容', 'error')
     return
   }
   if (formData.value.content.length < 10) {
-    alert('❌ 内容至少需要有10个字')
+    displayToast('❌ 内容至少需要有10个字', 'error')
     return
   }
   if (formData.value.content.length > 400) {
-    alert('❌ 内容不能超过400个字')
+    displayToast('❌ 内容不能超过400个字', 'error')
     return
   }
   
   // 分类验证
   if (!formData.value.categoryId) {
-    alert('❌ 请选择帖子分类')
+    displayToast('❌ 请选择帖子分类', 'error')
     return
   }
   
   // 图片验证
   const totalImages = existingImages.value.length + tempImageUrls.value.length
   if (totalImages > 9) {
-    alert('❌ 最多只能上传9张图片')
+    displayToast('❌ 最多只能上传9张图片', 'error')
     return
   }
   
@@ -371,14 +393,16 @@ const handlePublish = async () => {
     const res = await api.forum.updatePost(postId.value, postData)
     
     if (res.success) {
-      alert('✅ 编辑成功！')
-      router.push(`/forum/post/${postId.value}`)
+      displayToast('✅ 编辑成功！', 'success')
+      setTimeout(() => {
+        router.replace(`/forum/post/${postId.value}`)
+      }, 1500)
     } else {
-      alert('❌ ' + (res.message || '编辑失败'))
+      displayToast('❌ ' + (res.message || '编辑失败'), 'error')
     }
   } catch (error) {
     console.error('编辑失败:', error)
-    alert('❌ 编辑失败，请重试')
+    displayToast('❌ 编辑失败，请重试', 'error')
   } finally {
     publishing.value = false
   }
@@ -392,7 +416,7 @@ const goBack = () => {
 // 页面加载
 onMounted(() => {
   if (!appStore.token) {
-    alert('请先登录')
+    displayToast('请先登录', 'info')
     router.push('/login')
     return
   }
@@ -712,5 +736,74 @@ onMounted(() => {
 .submit-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Toast提示样式 */
+.toast-container {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 2000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  min-width: 200px;
+  text-align: center;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #f44336 0%, #ef5350 100%);
+}
+
+.toast-info {
+  background: linear-gradient(135deg, #2196F3 0%, #42a5f5 100%);
+}
+
+.toast-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Toast动画 */
+.toast-enter-active {
+  animation: toast-in 0.3s ease-out;
+}
+
+.toast-leave-active {
+  animation: toast-out 0.3s ease-in;
+}
+
+@keyframes toast-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes toast-out {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
 }
 </style>

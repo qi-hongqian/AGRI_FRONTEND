@@ -71,15 +71,20 @@
             />
           </div>
           <button v-else type="button" class="captcha-loading-btn" @click="loadCaptchaIfNeeded" :disabled="loadingCaptcha">
-            {{ loadingCaptcha ? '加载中...' : '点击加载验证码' }}
+            {{ loadingCaptcha ? '加载中...' : '验证码' }}
           </button>
         </div>
 
         <!-- 注册链接 -->
         <div class="register-link">
-          <button class="env-switch-btn" @click="toggleEnv" :title="'当前: ' + currentEnvDisplay">
-            🌐 {{ currentEnvDisplay }}
-          </button>
+          <div class="env-section">
+            <div class="env-hint">
+              💡 访问 http://8.141.102.201 切换生产环境
+            </div>
+            <button class="env-switch-btn" @click="toggleEnv" :title="'当前: ' + currentEnvDisplay">
+              {{ currentEnvDisplay }}
+            </button>
+          </div>
           <span @click="handleRegister" class="register-text">立即注册</span>
         </div>
 
@@ -88,14 +93,14 @@
           {{ loginError }}
         </div>
 
+        <!-- 一键登录按钮 (测试用) -->
+        <button class="quick-login-button" @click="quickLogin" :disabled="quickLoginLoading">
+          {{ quickLoginLoading ? '登录中...' : '一键登录(免输入)' }}
+        </button>
+
         <!-- 登录按钮 -->
         <button class="login-button" @click="handleLogin" :disabled="loginLoading">
           {{ loginLoading ? '登录中...' : '登录' }}
-        </button>
-
-        <!-- 一键登录按钮 (测试用) -->
-        <button class="quick-login-button" @click="quickLogin" :disabled="quickLoginLoading">
-          {{ quickLoginLoading ? '登录中...' : '一键登录(测试)' }}
         </button>
       </div>
 
@@ -138,25 +143,18 @@
         <div class="input-group">
           <i class="icon-lock">🔒</i>
           <input 
-            :type="showRegisterPassword ? 'text' : 'password'" 
+            type="password"
             v-model="registerData.password" 
             placeholder="请输入密码" 
             class="input-field"
           />
-          <button 
-            @click="toggleRegisterPasswordVisibility" 
-            class="toggle-password"
-            type="button"
-          >
-            {{ showRegisterPassword ? '👁️‍🗨️' : '👁️' }}
-          </button> 
         </div>
 
         <!-- 重复密码输入框 -->
         <div class="input-group">
           <i class="icon-lock">🔒</i>
           <input 
-            :type="showRegisterPassword ? 'text' : 'password'" 
+            type="password"
             v-model="registerData.confirmPassword" 
             placeholder="请重复密码" 
             class="input-field"
@@ -190,12 +188,48 @@
         </div>
       </div>
     </div>
+
+    <!-- 成功提示弹窗 (用于注册成功等) -->
+    <div v-if="showSuccessModal" class="modal-overlay" @click="closeSuccessModal">
+      <div class="confirm-modal" @click.stop>
+        <div class="modal-content">
+          <div class="modal-icon">🎉</div>
+          <h3 class="modal-title">注册成功</h3>
+          <p class="modal-text">恭喜您，账号注册成功！现在您可以返回登录页面，使用刚才注册的账号进行登录了。</p>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn confirm single" @click="closeSuccessModal">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 确认提示弹窗 (用于环境切换等) -->
+    <div v-if="showConfirmModal" class="modal-overlay" @click="closeConfirmModal">
+      <div class="confirm-modal" @click.stop>
+        <div class="modal-content">
+          <div class="modal-icon">🌐</div>
+          <h3 class="modal-title">切换环境</h3>
+          <p class="modal-text">确定要切换到 {{ pendingEnvName }} 吗？应用将会刷新以应用新配置。</p>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn cancel" @click="closeConfirmModal">取消</button>
+          <button class="modal-btn confirm" @click="confirmEnvSwitch">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <transition name="toast">
+      <div v-if="showToast" class="toast-container" :class="`toast-${toastType}`">
+        <span class="toast-message">{{ toastMessage }}</span>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import api from '../api'
 import { useAppStore } from '../stores/app'
 import { getEnvConfig, getCurrentEnv, setEnv } from '../config/env'
@@ -209,13 +243,33 @@ const password = ref('')
 const captcha = ref('')
 const captchaImage = ref('')
 const showPassword = ref(false)
-const showRegisterPassword = ref(false)
 const isRegister = ref(false)
 const time = ref('')
 const loginLoading = ref(false)
 const loginError = ref('')
 const loadingCaptcha = ref(false)  // 验证码加载中状态
 const quickLoginLoading = ref(false)  // 一键登录加载中状态
+
+// 弹窗相关状态
+const showSuccessModal = ref(false)
+const showConfirmModal = ref(false)
+const pendingEnvName = ref('')
+const pendingEnvValue = ref('')
+
+// Toast提示相关
+const showToast = ref(false)
+const toastMessage = ref('')
+const toastType = ref('success') // 'success' | 'error' | 'info'
+
+// 显示Toast提示
+const displayToast = (message, type = 'success') => {
+  toastMessage.value = message
+  toastType.value = type
+  showToast.value = true
+  setTimeout(() => {
+    showToast.value = false
+  }, 2500)
+}
 
 // 注册表单数据
 const registerData = ref({
@@ -236,78 +290,205 @@ const selectedAvatarUrl = ref('')  // 最终选择的头像 URL
 // 计算属性 - 空的，不再使用角色切换
 
 // 刷新验证码图片
-const refreshCaptcha = async (phoneNumber = '') => {
+const refreshCaptcha = async (phoneNumber = '', isAutoLoad = false) => {
   const phoneToUse = phoneNumber || phone.value
   
+  console.log('[refreshCaptcha 被调用]', {
+    phoneNumber,
+    phoneToUse,
+    isAutoLoad,
+    phone: phone.value,
+    timestamp: new Date().toISOString()
+  })
+  
   if (!phoneToUse.trim()) {
-    loginError.value = '请先输入手机号'
+    console.log('[验证码] 手机号为空')
+    if (!isAutoLoad) {  // 只有手动点击时才显示错误
+      loginError.value = '请先输入手机号'
+    }
     return
   }
   
   try {
     loadingCaptcha.value = true
-    loginError.value = ''
-    console.log('[\u5f00\u59cb\u52a0\u8f7d\u9a8c\u8bc1\u7801]', { phone: phoneToUse })
+    if (!isAutoLoad) {  // 只有手动点击时才清空错误
+      loginError.value = ''
+    }
+    console.log('[开始加载验证码]', { phone: phoneToUse, isAutoLoad, timestamp: new Date().toISOString() })
+    console.log('[调用 api.user.getCaptcha 之前]')
     
-    const response = await api.user.getCaptcha(phoneToUse)
+    // 添加 try-catch 来捕获任何可能的异常
+    let response
+    try {
+      console.log('[即将调用 getCaptcha]', { phone: phoneToUse })
+      response = await api.user.getCaptcha(phoneToUse)
+      console.log('[getCaptcha 调用完成]', { hasResponse: !!response })
+    } catch (apiError) {
+      console.error('[getCaptcha 调用异常]', {
+        message: apiError.message,
+        name: apiError.name,
+        code: apiError.code
+      })
+      throw apiError
+    }
     
-    console.log('[\u9a8c\u8bc1\u7801\u54cd\u5e94]', response)
+    console.log('[验证码响应]', response)
     
-    if (response.success) {
-      // \u68c0\u67e5\u54cd\u5e94\u7ed3\u6784\uff0c\u4e0d\u540c\u7684\u540e\u7aef\u53ef\u80fd\u8fd4\u56de\u4e0d\u540c\u7684\u5b57\u6bb5
-      const captchaImageData = response.captchaImage || response.data?.captchaImage
+    if (response && response.success) {
+      // ✅ axios 拦截器已经返回 data 对象，直接访问 response.captchaImage
+      // 后端返回格式：{ success, message, captchaImage: "data:image/png;base64,...", expireTime: 300 }
+      const captchaImageData = response.captchaImage
       
+      console.log('[验证码数据]', {
+        hasCaptchaImage: !!captchaImageData,
+        captchaImageLength: captchaImageData?.length,
+        expireTime: response.expireTime
+      })
+          
       if (captchaImageData) {
+        // ✅ captchaImage 是 base64 格式，可以直接赋值给 img 的 src
         captchaImage.value = captchaImageData
-        captcha.value = ''
-        console.log('[\u9a8c\u8bc1\u7801\u56fe\u7247\u52a0\u8f7d\u6210\u529f]')
+        captcha.value = ''  // 清空之前输入的验证码
+        console.log('[✅ 验证码图片加载成功]', {
+          isAutoLoad,
+          imageLength: captchaImageData.length,
+          expireTime: response.expireTime,
+          timestamp: new Date().toISOString()
+        })
       } else {
-        loginError.value = '\u9a8c\u8bc1\u7801\u6570\u636e\u4e0d\u5408\u6cd5'
-        console.error('[\u9a8c\u8bc1\u7801\u6570\u636e\u7ed3\u6784\u5f02\u5e38]', response)
+        console.log('[❌ 验证码图片不存在]', response)
+        if (!isAutoLoad) {
+          loginError.value = '验证码数据不合法'
+        }
       }
     } else {
-      loginError.value = response.message || '\u83b7\u53d6\u9a8c\u8bc1\u7801\u5931\u8d25'
-      console.error('[\u9a8c\u8bc1\u7801\u8bf7\u6c42\u5931\u8d25]', response.message)
+      console.log('[❌ 验证码失败]', response?.message)
+      if (!isAutoLoad) {
+        loginError.value = response?.message || '获取验证码失败'
+      } else {
+        // 自动加载失败時，仅输出日志，不改变 loginError
+        console.warn('[自动加载验证码失败]', response?.message || '未知错误')
+      }
     }
   } catch (error) {
-    console.error('[\u9a8c\u8bc1\u7801\u52a0\u8f7d\u9519\u8bef]', error)
-    loginError.value = '\u83b7\u53d6\u9a8c\u8bc1\u7801\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u8fde\u63a5'
+    console.error('[❌ 验证码输入未捕获的例外]', error)
+    console.error('[例外详情]', {
+      message: error.message,
+      name: error.name,
+      code: error.code,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    })
+    if (!isAutoLoad) {
+      loginError.value = '获取验证码失败，请检查网络连接'
+    } else {
+      // 自动加载失败，不显示错误提示，缓静输出日志
+      console.warn('[自动加载验证码错误]', error.message)
+    }
   } finally {
     loadingCaptcha.value = false
+    console.log('[refreshCaptcha 完成]', { timestamp: new Date().toISOString() })
   }
 }
 
-// \u5237\u65b0\u9a8c\u8bc1\u7801\u56fe\u7247\uff08\u5305\u88f9refreshCaptcha\uff09
+// 刷新验证码图片（包裹refreshCaptcha）
 const refreshCaptchaImage = async () => {
   await refreshCaptcha()
 }
 
-// \u5982\u679c\u624b\u673a\u53f7\u6709\u6548\uff0c\u4f1a\u81ea\u52a8\u52a0\u8f7d\u9a8c\u8bc1\u7801\uff0c\u5426\u5219\u8981\u6c42\u7528\u6237\u6b21总\u70b9\u51fb\u52a0\u8f7d
+// 诊断网络连接状态
+const diagnosisNetwork = async () => {
+  const envConfig = getEnvConfig()
+  const currentEnv = getCurrentEnv()
+  
+  console.log('\n========== 网络诊断 ==========')
+  console.log('当前环境:', currentEnv)
+  console.log('环境配置:', envConfig)
+  console.log('USER_API:', envConfig.USER_API)
+  console.log('localStorage APP_ENV:', localStorage.getItem('APP_ENV'))
+  
+  // 测试与后端的连接
+  try {
+    console.log('\n📡 测试 8081 连接...')
+    const response = await fetch(`${envConfig.USER_API}/api/auth/captcha?phone=13800138000`, {
+      method: 'GET'
+    })
+    console.log('响应状态:', response.status)
+    console.log('响应头:', response.headers)
+    const data = await response.json()
+    console.log('响应数据:', data)
+  } catch (error) {
+    console.error('❌ 连接失败:', error.message)
+  }
+  
+  console.log('========== 诊断结束 ==========\n')
+}
+
+// 如果手机号有效，会自动加载验证码，否则要求用户次总点击加载
 const loadCaptchaIfNeeded = async () => {
+  console.log('[👆 用户点击加载验证码按钮]', { timestamp: new Date().toISOString() })
+  
   const phoneToUse = phone.value
   if (!phoneToUse.trim()) {
-    loginError.value = '\u8bf7\u5148\u8f93\u5165\u624b\u673a\u53f7'
+    loginError.value = '请先输入手机号'
+    console.log('[❌ 手机号为空]')
     return
   }
   const phoneReg = /^1[3-9]\d{9}$/
   if (!phoneReg.test(phoneToUse)) {
-    loginError.value = '\u624b\u673a\u53f7\u683c\u5f0f\u4e0d\u6b63\u786e'
+    loginError.value = '手机号格式不正确'
+    console.log('[❌ 手机号格式不正确]', phoneToUse)
     return
   }
-  await refreshCaptcha(phoneToUse)
+  
+  console.log('[✅ 准备调用 refreshCaptcha]', { phone: phoneToUse, timestamp: new Date().toISOString() })
+  
+  try {
+    await refreshCaptcha(phoneToUse)
+    console.log('[✅ refreshCaptcha 调用成功]', { timestamp: new Date().toISOString() })
+  } catch (error) {
+    console.error('[❌ refreshCaptcha 调用失败]', error)
+  }
+  
+  console.log('[✅ loadCaptchaIfNeeded 执行完毕]', { timestamp: new Date().toISOString() })
 }
 
 // 手机号一样时改变时，随之也自动加载验证码
-const onPhoneChange = () => {
+const onPhoneChange = (event) => {
+  // 阻止任何默认行为
+  if (event && event.preventDefault) {
+    event.preventDefault()
+  }
+  if (event && event.stopPropagation) {
+    event.stopPropagation()
+  }
+  
+  console.log('[⚠️ onPhoneChange 被调用]', {
+    timestamp: new Date().toISOString(),
+    phoneValue: phone.value,
+    event: event?.type
+  })
+  
   // 检查手机号是否有效
   const phoneReg = /^1[3-9]\d{9}$/
+  console.log('[手机号变化]', {
+    phone: phone.value,
+    isValid: phoneReg.test(phone.value),
+    length: phone.value.length
+  })
+  
   if (phoneReg.test(phone.value)) {
-    // 手机号有效，自动加载验证码
-    refreshCaptcha()
+    // 手机号有效，自动加载验证码（传递 isAutoLoad = true）
+    // 即使失败也不显示错误，只输出日志
+    console.log('[触发自动加载验证码]', phone.value)
+    refreshCaptcha(phone.value, true)  // ✅ 第二个参数: isAutoLoad = true
   } else {
     // 手机号无效，清除验证码图片
+    console.log('[手机号无效，清除验证码]')
     captchaImage.value = ''
   }
+  
+  console.log('[\u2705 onPhoneChange \u6267\u884c\u5b8c\u6bd5]', { timestamp: new Date().toISOString() })
 }
 
 const validateLoginForm = () => {
@@ -386,22 +567,30 @@ const handleLogin = async () => {
   try {
     loginLoading.value = true
     
-    // 调用登录API
+    // 📝 调用登录API
+    // 请求格式：POST /api/auth/login
+    // Content-Type: application/json
+    // Body: { phone, password, captcha }
     const response = await api.user.login(phone.value, password.value, captcha.value)
     
+    console.log('[登录请求]', {
+      phone: phone.value,
+      password: '***',
+      captcha: captcha.value
+    })
     console.log('[登录响应]', response)
     
     if (response.success) {
-      // 保存用户信息和token到store
+      // ✅ 保存用户信息和token到store
       appStore.setUser({
         ...response.user,
         token: response.token
       })
       
       // 记录登录成功
-      console.log('登录成功', {
-        user: response.user,
-        token: response.token
+      console.log('✅ 登录成功', {
+        userId: response.user?.id,
+        tokenLength: response.token?.length
       })
       
       // 跳转到首页
@@ -409,10 +598,11 @@ const handleLogin = async () => {
     } else {
       // 处理错误响应（验证码错误、密码错误等）
       loginError.value = response.message || '登录失败'
+      console.warn('❌ 登录失败:', response.message)
       refreshCaptcha()  // 重新加载验证码
     }
   } catch (error) {
-    console.error('登录错误:', error)
+    console.error('❌ 登录错误:', error)
     loginError.value = error.message || '登录失败，请检查网络连接'
     refreshCaptcha()
   } finally {
@@ -476,19 +666,52 @@ const handleRegister = () => {
 // 当前环境显示文本
 const currentEnvDisplay = computed(() => {
   const env = getCurrentEnv()
-  return env === 'development' ? '本地 (localhost)' : '测试 (IP)'
+  const envMap = {
+    'development': '🌐 本地',
+    'testing': '🜖 测试',
+    'production': '🚀 生产'
+  }
+  return envMap[env] || '本地'
 })
 
-// 切换环境
+// 切换环境（三个环境循环切换）
 const toggleEnv = () => {
   const currentEnv = getCurrentEnv()
-  const nextEnv = currentEnv === 'development' ? 'testing' : 'development'
-  const envName = nextEnv === 'development' ? '本地开发环境' : '测试环境'
+  let nextEnv
+  let envName
   
-  if (confirm(`确定要切换到${envName}吗？应用将会刷新。`)) {
-    console.log(`[环境切换] ${currentEnv} -> ${nextEnv}`)
-    setEnv(nextEnv)
+  if (currentEnv === 'development') {
+    nextEnv = 'testing'
+    envName = '手机测试环境 (192.168.103.25)'
+  } else if (currentEnv === 'testing') {
+    nextEnv = 'production'
+    envName = '生产环境 (8.141.102.201)'
+  } else {
+    nextEnv = 'development'
+    envName = '本地开发环境 (localhost)'
   }
+  
+  pendingEnvName.value = envName
+  pendingEnvValue.value = nextEnv
+  showConfirmModal.value = true
+}
+
+// 确认切换环境
+const confirmEnvSwitch = () => {
+  console.log(`[环境切换] -> ${pendingEnvValue.value}`)
+  setEnv(pendingEnvValue.value)
+  showConfirmModal.value = false
+}
+
+// 关闭确认弹窗
+const closeConfirmModal = () => {
+  showConfirmModal.value = false
+}
+
+// 关闭成功弹窗
+const closeSuccessModal = () => {
+  showSuccessModal.value = false
+  cancelRegister() // 注册成功关闭弹窗后返回登录页
 }
 
 // 取消注册
@@ -552,10 +775,12 @@ const handleAvatarChange = async (event) => {
     
     // 立即上传到后端获取临时 URL
     const response = await api.user.uploadTempAvatar(file)
-    const data = response.data || response
     
-    if (data.success && data.avatarUrl) {
-      const newTempUrl = data.avatarUrl
+    console.log('[临时头像响应]', response)
+    
+    // ✅ 直接从 response.data 中取值（axios 拦截器已经返回 data 对象）
+    if (response.success && response.data?.avatarUrl) {
+      const newTempUrl = response.data.avatarUrl
       
       // 添加到所有临时头像数组
       allTempAvatars.value.push(newTempUrl)
@@ -572,7 +797,7 @@ const handleAvatarChange = async (event) => {
         selectedAvatarUrl: selectedAvatarUrl.value
       })
     } else {
-      registerError.value = data.message || '头像上传失败'
+      registerError.value = response.message || '头像上传失败'
     }
   } catch (error) {
     console.error('[头像上传错误]', error)
@@ -603,32 +828,34 @@ const submitRegister = async () => {
   try {
     registerLoading.value = true
     
-    // 创建 FormData 对象
-    const formData = new FormData()
-    formData.append('phone', registerData.value.phone)
-    formData.append('password', registerData.value.password)
-    formData.append('nickname', registerData.value.nickname)
+    // ✅ 使用普通对象传递数据，而不是 FormData
+    // ✅ API 层会将其转换为 URLSearchParams 和 application/x-www-form-urlencoded
+    const registerPayload = {
+      phone: registerData.value.phone,
+      password: registerData.value.password,
+      nickname: registerData.value.nickname
+    }
     
-    // 传递已上传的头像 URL（而不是文件）
-    formData.append('avatarUrl', selectedAvatarUrl.value || '')
+    // 如果用户选择了头像，添加到请求
+    if (selectedAvatarUrl.value) {
+      registerPayload.avatarUrl = selectedAvatarUrl.value
+    }
         
     console.log('[注册请求]', {
-      phone: registerData.value.phone,
-      nickname: registerData.value.nickname,
-      avatarUrl: selectedAvatarUrl.value || '无',
+      phone: registerPayload.phone,
+      nickname: registerPayload.nickname,
+      avatarUrl: registerPayload.avatarUrl || '无',
       allTempAvatars: allTempAvatars.value
     })
     
     // 调用注册 API
-    const response = await api.user.register(formData)
+    const response = await api.user.register(registerPayload)
     
     console.log('[注册响应]', response)
     
-    // 直接 axios 返回的是 response 对象，数据在 response.data 中
-    const data = response.data || response
-        
-    if (data.success) {
-      console.log('注册成功', data.user)
+    // ✅ axios 拦截器已经返回 data 对象
+    if (response.success) {
+      console.log('注册成功', response.data?.user)
           
       // 批量删除未使用的临时头像（不包括选中的头像）
       const unusedAvatars = allTempAvatars.value.filter(url => url !== selectedAvatarUrl.value)
@@ -648,10 +875,10 @@ const submitRegister = async () => {
       selectedAvatarUrl.value = ''
       tempAvatarUrl.value = ''
           
-      alert('注册成功，请登录')
-      cancelRegister()
+      // ✅ 注册成功显示自定义弹窗
+      showSuccessModal.value = true
     } else {
-      registerError.value = data.message || '注册失败'
+      registerError.value = response.message || '注册失败'
     }
   } catch (error) {
     console.error('注册错误:', error)
@@ -664,10 +891,6 @@ const submitRegister = async () => {
 // 切换密码可见性
 const togglePasswordVisibility = () => {
   showPassword.value = !showPassword.value
-}
-
-const toggleRegisterPasswordVisibility = () => {
-  showRegisterPassword.value = !showRegisterPassword.value
 }
 
 // 定时器引用
@@ -686,6 +909,13 @@ onMounted(() => {
   // 不会在挂载时也调用获取验证码，因为手机号为空
   // 等用户输入手机号后再调用
   
+  // 从 URL query 参数中读取手机号（用于修改密码或修改手机号后回填）
+  const route = useRoute()
+  if (route.query.phone) {
+    phone.value = route.query.phone
+    console.log('[登录页] 从 URL query 中回填手机号:', phone.value)
+  }
+  
   // 更新时间
   updateTime()
   timeUpdateTimer = setInterval(updateTime, 60000)
@@ -698,8 +928,8 @@ onMounted(() => {
 const handleBeforeUnload = () => {
   if (allTempAvatars.value.length > 0) {
     const envConfig = getEnvConfig()
-    // 使用 keepalive 确保请求在页面关闭后继纻
-    // 异常关闭时删除所有临时头像（包括选中的）
+    // 使用 keepalive 确保请求在页面关闭后继
+    // 异常关闭时删除所有临时头像（包括 selectedAvatarUrl）
     fetch(`${envConfig.USER_API}/api/user/avatar/temp-delete-batch`, {
       method: 'POST',
       headers: {
@@ -847,7 +1077,7 @@ onUnmounted(() => {
   height: 56px;
 }
 
-.icon-user, .icon-lock, .icon-shield {
+.icon-user, .icon-lock, .icon-shield, .icon-phone {
   font-size: 20px;
   margin-right: 12px;
   color: #757575;
@@ -1113,7 +1343,7 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-/* 环境切换按针 */
+/* 环境切换按钮 */
 .env-switch-btn {
   background: none;
   border: none;
@@ -1129,6 +1359,21 @@ onUnmounted(() => {
 .env-switch-btn:hover {
   color: #66BB6A;
   transform: scale(1.05);
+}
+
+/* 环境区域 */
+.env-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 环境提示文字 */
+.env-hint {
+  font-size: 12px;
+  color: #999;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 /* 角色切换 */
@@ -1174,7 +1419,7 @@ onUnmounted(() => {
   font-size: 18px;
   font-weight: bold;
   cursor: pointer;
-  margin-top: 32px;
+  margin-top: 12px;
   transition: background 0.3s ease;
 }
 
@@ -1192,18 +1437,18 @@ onUnmounted(() => {
   opacity: 0.6;
 }
 
-/* 一\u952e\u767b\u5f55\u6309钮 */
+/* 一键登录按钮 */
 .quick-login-button {
   width: 100%;
-  height: 48px;
+  height: 56px;
   background: #FFA726;
   color: white;
   border: none;
   border-radius: 12px;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: bold;
   cursor: pointer;
-  margin-top: 12px;
+  margin-top: 32px;
   transition: background 0.3s ease;
 }
 
@@ -1287,5 +1532,145 @@ onUnmounted(() => {
   .toolbar-title {
     font-size: 20px;
   }
+}
+
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  padding: 32px;
+  backdrop-filter: blur(4px);
+}
+
+.confirm-modal {
+  background: white;
+  width: 100%;
+  max-width: 320px;
+  border-radius: 20px;
+  overflow: hidden;
+  animation: modalIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes modalIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.modal-content {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.modal-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin: 0 0 12px 0;
+}
+
+.modal-text {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.modal-footer {
+  display: flex;
+  border-top: 1px solid #f0f0f0;
+}
+
+.modal-btn {
+  flex: 1;
+  padding: 16px;
+  border: none;
+  background: none;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.modal-btn.cancel {
+  color: #999;
+  border-right: 1px solid #f0f0f0;
+}
+
+.modal-btn.confirm {
+  color: #66BB6A;
+}
+
+.modal-btn.confirm.single {
+  border-right: none;
+}
+
+.modal-btn:active {
+  background: #f9f9f9;
+}
+
+/* Toast 提示样式 */
+.toast-container {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 4000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  min-width: 200px;
+  text-align: center;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #f44336 0%, #ef5350 100%);
+}
+
+.toast-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Toast 动画 */
+.toast-enter-active {
+  animation: toast-in 0.3s ease-out;
+}
+
+.toast-leave-active {
+  animation: toast-out 0.3s ease-in;
+}
+
+@keyframes toast-in {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toast-out {
+  0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 }
 </style>

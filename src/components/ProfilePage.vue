@@ -77,9 +77,9 @@
             <span class="menu-text">修改手机号</span>
             <span class="menu-arrow">›</span>
           </div>
-          <div class="menu-item" @click="handleMenuClick('bindEmail')">
-            <span class="menu-icon">📧</span>
-            <span class="menu-text">绑定邮箱</span>
+          <div class="menu-item" @click="handleMenuClick('expressAddress')">
+            <span class="menu-icon">📦</span>
+            <span class="menu-text">快递地址</span>
             <span class="menu-arrow">›</span>
           </div>
         </div>
@@ -133,10 +133,32 @@
       </div>
     </div>
   </div>
+
+  <!-- 确认弹窗 (用于退出登录、切换环境等) -->
+  <div v-if="showConfirmModal" class="modal-overlay" @click="closeConfirmModal">
+    <div class="confirm-modal" @click.stop>
+      <div class="modal-content">
+        <div class="modal-icon">{{ confirmModalIcon }}</div>
+        <h3 class="modal-title">{{ confirmModalTitle }}</h3>
+        <p class="modal-text">{{ confirmModalText }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn cancel" @click="closeConfirmModal">取消</button>
+        <button class="modal-btn confirm" :class="confirmModalType" @click="executePendingAction">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast提示 -->
+  <transition name="toast">
+    <div v-if="showToast" class="toast-container" :class="`toast-${toastType}`">
+      <span class="toast-message">{{ toastMessage }}</span>
+    </div>
+  </transition>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { getEnvConfig, getCurrentEnv, setEnv } from '../config/env'
@@ -163,6 +185,53 @@ const user = ref({
 const isLoading = ref(appStore.infoCompletionRate === 0)
 // 从 Store 中取值，或使用存储的值
 const infoCompletionRate = computed(() => appStore.infoCompletionRate)
+
+// 弹窗相关状态
+const showConfirmModal = ref(false)
+const confirmModalTitle = ref('')
+const confirmModalText = ref('')
+const confirmModalIcon = ref('❓')
+const confirmModalType = ref('default') // 'default' | 'danger'
+const pendingAction = ref(null)
+
+// Toast提示相关
+const showToast = ref(false)
+const toastMessage = ref('')
+const toastType = ref('success') // 'success' | 'error' | 'info'
+
+// 显示Toast提示
+const displayToast = (message, type = 'success') => {
+  toastMessage.value = message
+  toastType.value = type
+  showToast.value = true
+  setTimeout(() => {
+    showToast.value = false
+  }, 2500)
+}
+
+// 打开确认弹窗
+const openConfirmModal = (options) => {
+  confirmModalTitle.value = options.title || '确认提示'
+  confirmModalText.value = options.text || '确定要执行此操作吗？'
+  confirmModalIcon.value = options.icon || '❓'
+  confirmModalType.value = options.type || 'default'
+  pendingAction.value = options.action
+  showConfirmModal.value = true
+}
+
+// 关闭弹窗
+const closeConfirmModal = () => {
+  showConfirmModal.value = false
+  pendingAction.value = null
+}
+
+// 执行弹窗确认后的操作
+const executePendingAction = () => {
+  if (pendingAction.value) {
+    pendingAction.value()
+  }
+  closeConfirmModal()
+}
 
 // 控制手机号显示状态
 const isPhoneVisible = ref(false)
@@ -213,19 +282,41 @@ const maskPhone = (phone) => {
 // 当前环境显示文本
 const currentEnvDisplay = computed(() => {
   const env = getCurrentEnv()
-  return env === 'development' ? '本地 (localhost)' : '测试 (IP)'
+  const envMap = {
+    'development': '🌐 本地',
+    'testing': '🜖 测试',
+    'production': '🚀 生产'
+  }
+  return envMap[env] || '本地'
 })
 
-// 切换环境
+// 切换环境（三个环境循环切换）
 const toggleEnv = () => {
   const currentEnv = getCurrentEnv()
-  const nextEnv = currentEnv === 'development' ? 'testing' : 'development'
-  const envName = nextEnv === 'development' ? '本地开发环境' : '测试环境'
+  let nextEnv
+  let envName
   
-  if (confirm(`确定要切换到${envName}吗？应用将会刷新。`)) {
-    console.log(`[环境切换] ${currentEnv} -> ${nextEnv}`)
-    setEnv(nextEnv)
+  // 循环切换: development -> testing -> production -> development
+  if (currentEnv === 'development') {
+    nextEnv = 'testing'
+    envName = '手机测试环境 (192.168.103.25)'
+  } else if (currentEnv === 'testing') {
+    nextEnv = 'production'
+    envName = '生产环境 (8.141.102.201)'
+  } else {
+    nextEnv = 'development'
+    envName = '本地开发环境 (localhost)'
   }
+  
+  openConfirmModal({
+    title: '环境切换',
+    text: `确定要切换到${envName}吗？应用将会刷新以应用新配置。`,
+    icon: '🌐',
+    action: () => {
+      console.log(`[环境切换] ${currentEnv} -> ${nextEnv}`)
+      setEnv(nextEnv)
+    }
+  })
 }
 
 // 计算信息完成度级别
@@ -245,10 +336,38 @@ onMounted(() => {
   loadUserInfo()
 })
 
+// 页面激活时重新加载（从编辑页面返回时）
+onActivated(() => {
+  console.log('[个人页面] 页面激活，重新加载用户信息')
+  loadUserInfo(true) // 传入true表示强制刷新
+})
+
 // 加载用户信息
-const loadUserInfo = async () => {
+const loadUserInfo = async (forceRefresh = false) => {
   try {
-    const userData = appStore.user
+    // 先检查是否有 token
+    if (!appStore.token) {
+      console.warn('[个人页面] 没有 token，跳转登录')
+      router.push('/login')
+      return
+    }
+    
+    // 如果强制刷新或 store 中没有 user 信息，从后端获取
+    let userData = appStore.user
+    if (forceRefresh || !userData) {
+      console.log('[个人页面] 从后端获取用户信息', { forceRefresh, hasUser: !!userData })
+      const res = await api.user.getUserInfo()
+      if (res.success && res.data) {
+        userData = res.data
+        // 保存到 store
+        appStore.setUser(userData)
+      } else {
+        console.warn('[个人页面] 获取用户信息失败:', res.message)
+        router.push('/login')
+        return
+      }
+    }
+    
     if (userData) {
       user.value = {
         id: userData.id,
@@ -261,24 +380,26 @@ const loadUserInfo = async () => {
       
       // 获取信息完成度
       const res = await api.user.getEditUserInfo()
-      console.log('[\u4e2a\u4eba\u9875\u9762] API\u54cd\u5e94:', res)
+      console.log('[个人页面] API响应:', res)
       if (res.success && res.data) {
-        // \u6839\u636e\u7528\u6237\u4fe1\u606f\u8ba1\u7b97\u5b8c\u6210\u5ea6
+        // 根据用户信息计算完成度
         let completedCount = 0
-        const totalFields = 5 // \u771f\u5b9e\u59d3\u540d\u3001\u6027\u522b\u3001\u804c\u4e1a\u3001\u5730\u533a\u3001\u4e2a\u4eba\u7b80\u4ecb
-                    
+        const totalFields = 7 // 真实姓名、性别、职业、地区、个人简介、邮箱、详细地址
+                          
         if (res.data.realName) completedCount++
         if (res.data.gender) completedCount++
         if (res.data.profession) completedCount++
         if (res.data.region && res.data.region.provinceId) completedCount++
         if (res.data.introduction) completedCount++
-                    
+        if (res.data.email) completedCount++
+        if (res.data.detailAddress) completedCount++
+                          
         const rate = Math.round((completedCount / totalFields) * 100)
-        console.log('[\u4e2a\u4eba\u9875\u9762] \u8ba1\u7b97\u5b8c\u6210\u5ea6:', completedCount, '/', totalFields, '=', rate + '%')
-        // \u4fdd\u5b58\u5230 Store \u4e2d\uff0c\u4ee5\u4fbf\u5176\u4ed6\u9875\u9762\u53ef\u4ee5\u76f4\u63a5\u4f7f\u7528
+        console.log('[个人页面] 计算完成度:', completedCount, '/', totalFields, '=', rate + '%')
+        // 保存到 Store 中，以便其他页面可以直接使用
         appStore.setInfoCompletionRate(rate)
       } else {
-        console.warn('[\u4e2a\u4eba\u9875\u9762] API\u8fd4\u56de\u6570\u636e\u5f02\u5e38:', res)
+        console.warn('[个人页面] API返回数据异常:', res)
       }
     } else {
       console.warn('[个人页面] 用户信息没找到')
@@ -295,19 +416,40 @@ const loadUserInfo = async () => {
 
 // 菜单点击处理
 const handleMenuClick = (action) => {
-  console.log('[菜单点击]', action)
-  // TODO: 根据不同的 action 导航到相应的设置页面
-  // 这里先预留功能，后续可以实现各个设置页面
-  const messages = {
-    'changePassword': '修改密码功能开发中...',
-    'changePhone': '修改手机号功能开发中...',
-    'bindEmail': '绑定邮箱功能开发中...',
-    'privacySettings': '隐私设置功能开发中...',
-    'blockList': '黑名单功能开发中...',
-    'aboutApp': '关于应用功能开发中...',
-    'feedback': '意见反馈功能开发中...'
+  console.log('[\u83dc单\u70b9\u51fb]', action)
+  // \u4e0d\u540c\u7684 action \u5bfc\u822a\u5230\u76f8\u5e94\u7684\u9875\u9762
+  switch (action) {
+    case 'changePassword':
+      // \u5bfc\u822a\u5230\u4fee\u6539\u5bc6\u7801\u9875\u9762
+      router.push('/change-password')
+      break
+    case 'changePhone':
+      // \u5bfc\u822a\u5230\u4fee\u6539\u624b\u673a\u53f7\u9875\u9762
+      router.push('/change-phone')
+      break
+    case 'expressAddress':
+      // 导航到快递地址页面
+      router.push('/express-address')
+      break
+    case 'privacySettings':
+      // 导航到隐私设置页面
+      router.push('/privacy-settings')
+      break
+    case 'blockList':
+      // 导航到黑名单页面
+      router.push('/block-list')
+      break
+    case 'aboutApp':
+      // 导航到关于应用页面
+      router.push('/about-app')
+      break
+    case 'feedback':
+      // 导航到意见反馈页面
+      router.push('/feedback')
+      break
+    default:
+      displayToast('功能开发中...', 'info')
   }
-  alert(messages[action] || '功能开发中...')
 }
 
 // 前往编辑个人信息
@@ -318,19 +460,25 @@ const goToEditProfile = () => {
 }
 
 // 登出账户
-const handleLogout = async () => {
-  if (confirm('确定要登出账户吗？')) {
-    try {
-      // 清除用户信息和token
-      appStore.logout()
-      console.log('[登出成功]')
-      // 重定向到登录页
-      router.push('/login')
-    } catch (error) {
-      console.error('[登出失败]', error)
-      alert('登出失败，请重试')
+const handleLogout = () => {
+  openConfirmModal({
+    title: '退出登录',
+    text: '确定要登出当前账户吗？登出后需重新登录才能访问完整功能。',
+    icon: '🚪',
+    type: 'danger',
+    action: async () => {
+      try {
+        // 清除用户信息和token
+        appStore.logout()
+        console.log('[登出成功]')
+        // 重定向到登录页
+        router.push('/login')
+      } catch (error) {
+        console.error('[登出失败]', error)
+        displayToast('登出失败，请重试', 'error')
+      }
     }
-  }
+  })
 }
 
 // 打开头像文件选择
@@ -345,13 +493,13 @@ const handleAvatarChange = async (event) => {
   
   // 验证文件类丛
   if (!file.type.startsWith('image/')) {
-    alert('请选择图片文件')
+    displayToast('请选择图片文件', 'error')
     return
   }
   
   // 验证文件大小 (最大 5MB)
   if (file.size > 5 * 1024 * 1024) {
-    alert('图片大小不能超过 5MB')
+    displayToast('图片大小不能超过 5MB', 'error')
     return
   }
   
@@ -365,7 +513,7 @@ const handleAvatarChange = async (event) => {
     console.log('[头像上传响应]', response)
     
     if (response.success) {
-      const newAvatarUrl = response.avatarUrl || response.url
+      const newAvatarUrl = response.data?.avatarUrl  // ✅ 改为什中 data 中取值
       
       if (newAvatarUrl) {
         // 更新本地用户信息
@@ -378,18 +526,38 @@ const handleAvatarChange = async (event) => {
         })
         
         console.log('[头像上传成功]', newAvatarUrl)
-        alert('头像上传成功')
+        displayToast('✅ 头像上传成功', 'success')
       } else {
-        console.error('[头像响应字段不正常]', response)
-        alert('头像上传失败，请重试')
+        console.error('[头像响应中缺少 avatarUrl]', response)
+        displayToast('❌ 头像上传失败，请重试', 'error')
       }
     } else {
       console.error('[头像上传失败]', response.message)
-      alert(response.message || '头像上传失败')
+      
+      // 根据具体错误消息显示提示
+      let errorMsg = `❌ 上传失败: ${response.message || '未知错误'}`
+      
+      if (response.message?.includes('文件格式')) {
+        errorMsg = '❌ 不支持的文件格式'
+      } else if (response.message?.includes('请先登录')) {
+        errorMsg = '❌ 登录已过期'
+      }
+      
+      displayToast(errorMsg, 'error')
     }
   } catch (error) {
     console.error('[头像上传错误]', error)
-    alert('头像上传失败，请检查网络连接')
+    
+    // 提供更详细的错误提示
+    let errorMsg = '❌ 网络连接失败'
+    
+    if (error.message?.includes('timeout')) {
+      errorMsg = '❌ 请求超时'
+    } else if (error.status === 401) {
+      errorMsg = '❌ 登录已过期'
+    }
+    
+    displayToast(errorMsg, 'error')
   } finally {
     isUploadingAvatar.value = false
     // 清除文件输入（为了下次不是的处理）
@@ -739,5 +907,142 @@ const handleAvatarChange = async (event) => {
     font-size: 12px;
     padding: 6px 12px;
   }
+}
+
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  padding: 32px;
+  backdrop-filter: blur(4px);
+}
+
+.confirm-modal {
+  background: white;
+  width: 100%;
+  max-width: 320px;
+  border-radius: 20px;
+  overflow: hidden;
+  animation: modalIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes modalIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.modal-content {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.modal-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin: 0 0 12px 0;
+}
+
+.modal-text {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.modal-footer {
+  display: flex;
+  border-top: 1px solid #f0f0f0;
+}
+
+.modal-btn {
+  flex: 1;
+  padding: 16px;
+  border: none;
+  background: none;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.modal-btn.cancel {
+  color: #999;
+  border-right: 1px solid #f0f0f0;
+}
+
+.modal-btn.confirm {
+  color: #4CAF50;
+}
+
+.modal-btn.confirm.danger {
+  color: #FF5252;
+}
+
+.modal-btn:active {
+  background: #f9f9f9;
+}
+
+/* Toast提示样式 */
+.toast-container {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 4000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  min-width: 200px;
+  text-align: center;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #f44336 0%, #ef5350 100%);
+}
+
+.toast-info {
+  background: linear-gradient(135deg, #2196F3 0%, #42a5f5 100%);
+}
+
+/* Toast动画 */
+.toast-enter-active {
+  animation: toast-in 0.3s ease-out;
+}
+
+.toast-leave-active {
+  animation: toast-out 0.3s ease-in;
+}
+
+@keyframes toast-in {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toast-out {
+  0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 }
 </style>

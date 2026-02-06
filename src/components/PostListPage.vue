@@ -85,6 +85,13 @@
         class="post-card"
         @click="goToPostDetail(post.id)"
       >
+        <!-- 作者信息 (置于首位) -->
+        <div class="author-wrapper">
+          <img v-if="post.avatar" :src="getImageUrl(post.avatar, true)" class="author-avatar" />
+          <div v-else class="author-avatar-placeholder">👤</div>
+          <span class="author-name">{{ post.nickname || '用户' + post.userId }}</span>
+        </div>
+
         <!-- 缩略图 -->
         <div v-if="getPostThumbnail(post)" class="post-thumbnail-wrapper">
           <img 
@@ -108,10 +115,9 @@
         <!-- 帖子内容预览 -->
         <p class="post-preview">{{ getContentPreview(post.content) }}</p>
 
-        <!-- 分类和作者信息 -->
+        <!-- 分类信息 -->
         <div class="post-info">
           <span class="category-tag">{{ post.categoryName }}</span>
-          <span class="author-info">👤 用户{{ post.userId }}</span>
         </div>
 
         <!-- 帖子统计 -->
@@ -120,8 +126,8 @@
             <span class="stat-icon">👁️</span>
             <span class="stat-value">{{ formatNumber(post.viewCount) }}</span>
           </span>
-          <span class="stat-item">
-            <span class="stat-icon">❤️</span>
+          <span class="stat-item" :class="{ liked: post.hasLiked }">
+            <span class="stat-icon">{{ post.hasLiked ? '❤️' : '🤍' }}</span>
             <span class="stat-value">{{ formatNumber(post.likeCount) }}</span>
           </span>
           <span class="stat-item">
@@ -215,11 +221,12 @@ const getContentPreview = (content) => {
 }
 
 // 构造完整的图片URL
-const getImageUrl = (relativePath) => {
+const getImageUrl = (relativePath, isAvatar = false) => {
   if (!relativePath) return ''
   if (relativePath.startsWith('http')) return relativePath
   const envConfig = getEnvConfig()
-  return `${envConfig.FORUM_API}${relativePath}`
+  const baseUrl = isAvatar ? envConfig.USER_API : envConfig.FORUM_API
+  return `${baseUrl}${relativePath}`
 }
 
 // 获取帖子的第一张图片（缩略图）
@@ -703,9 +710,50 @@ onMounted(() => {
   font-weight: 600;
 }
 
-.author-info {
-  font-size: 12px;
+.author-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  position: relative;
+  padding-bottom: 8px;
+}
+
+.author-wrapper::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100px;
+  height: 1px;
+  background: #eee;
+}
+
+.author-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid #4caf50;
+}
+
+.author-avatar-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
   color: #999;
+  border: 1.5px solid #eee;
+}
+
+.author-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
 }
 
 /* 帖子统计 */
@@ -795,6 +843,14 @@ onMounted(() => {
 
 .fab:active {
   transform: scale(0.95);
+}
+
+.stat-item.liked {
+  color: #f44336;
+}
+
+.stat-item.liked .stat-icon {
+  text-shadow: 0 0 5px rgba(244, 67, 54, 0.3);
 }
 
 /* 响应式 */

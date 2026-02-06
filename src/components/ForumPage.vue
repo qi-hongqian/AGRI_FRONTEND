@@ -11,28 +11,37 @@
       <input 
         v-model="searchKeyword" 
         type="text" 
-        placeholder="搜索帖子..." 
+        placeholder="搜索帖子名称..."
         class="search-input"
         @keyup.enter="handleSearch"
       >
       <button class="search-btn" @click="handleSearch">🔍</button>
     </div>
 
-    <!-- 分类标签 -->
+    <!-- 分类标签 - 可滑动窗口 -->
     <div class="category-section">
       <h2 class="section-title">📂 论坛分类</h2>
-      <div class="category-grid">
-        <div 
-          v-for="category in categories" 
-          :key="category.id"
-          class="category-card"
-          @click="goToCategory(category.id)"
-        >
-          <div class="category-icon">{{ getCategoryIcon(category.name) }}</div>
-          <div class="category-info">
-            <h3 class="category-name">{{ category.name }}</h3>
-            <p class="category-desc">{{ category.description }}</p>
-            <span class="post-count">{{ category.postCount }} 帖子</span>
+      <div class="category-scroll-container">
+        <div class="category-scroll">
+          <!-- 全部帖子 -->
+          <div 
+            class="category-tab"
+            :class="{ active: selectedCategoryId === 'all' }"
+            @click="goToAllPosts"
+          >
+            <span class="category-icon">📌</span>
+            <span class="category-label">全部帖子</span>
+          </div>
+          <!-- 其他分类 -->
+          <div 
+            v-for="category in categories" 
+            :key="category.id"
+            class="category-tab"
+            :class="{ active: selectedCategoryId === category.id }"
+            @click="selectCategory(category.id)"
+          >
+            <span class="category-icon">{{ getCategoryIcon(category.name) }}</span>
+            <span class="category-label">{{ category.name }}</span>
           </div>
         </div>
       </div>
@@ -61,6 +70,13 @@
           class="post-card"
           @click="goToPostDetail(post.id)"
         >
+          <!-- 作者信息 (置于首位) -->
+          <div class="author-info">
+            <img v-if="post.avatar" :src="getImageUrl(post.avatar, true)" class="author-avatar" />
+            <div v-else class="author-avatar-placeholder">👤</div>
+            <span class="author-name">{{ post.nickname || '用户' + post.userId }}</span>
+          </div>
+
           <!-- 置顶/精华标签 -->
           <div class="post-badges">
             <span v-if="post.isTop" class="badge badge-top">📌 置顶</span>
@@ -78,10 +94,15 @@
 
           <!-- 帖子元信息 -->
           <div class="post-meta">
-            <span class="meta-item">👁️ {{ post.viewCount }}</span>
-            <span class="meta-item">❤️ {{ post.likeCount }}</span>
-            <span class="meta-item">💬 {{ post.commentCount }}</span>
-            <span class="meta-item">📅 {{ formatTime(post.createTime) }}</span>
+            <div class="stats-info">
+              <span class="meta-item">👁️ {{ post.viewCount }}</span>
+              <span class="meta-item" :class="{ liked: post.hasLiked }">
+                <span class="meta-icon">{{ post.hasLiked ? '❤️' : '🤍' }}</span>
+                {{ post.likeCount }}
+              </span>
+              <span class="meta-item">💬 {{ post.commentCount }}</span>
+              <span class="meta-item">📅 {{ formatTime(post.createTime) }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -98,6 +119,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
+import { getEnvConfig } from '../config/env'
 
 const router = useRouter()
 
@@ -106,6 +128,7 @@ const searchKeyword = ref('')
 const categories = ref([])
 const hotPosts = ref([])
 const loading = ref(false)
+const selectedCategoryId = ref('all')
 
 // 分类图标映射
 const categoryIcons = {
@@ -128,6 +151,15 @@ const getCategoryIcon = (name) => {
 const getContentPreview = (content) => {
   if (!content) return ''
   return content.length > 100 ? content.substring(0, 100) + '...' : content
+}
+
+// 构造完整的图片URL
+const getImageUrl = (relativePath, isAvatar = false) => {
+  if (!relativePath) return ''
+  if (relativePath.startsWith('http')) return relativePath
+  const envConfig = getEnvConfig()
+  const baseUrl = isAvatar ? envConfig.USER_API : envConfig.FORUM_API
+  return `${baseUrl}${relativePath}`
 }
 
 // 格式化时间
@@ -191,8 +223,14 @@ const loadHotPosts = async () => {
   }
 }
 
-// 跳转到分类页面
-const goToCategory = (categoryId) => {
+// 跳转到全部帖子
+const goToAllPosts = () => {
+  selectedCategoryId.value = 'all'
+}
+
+// 选择分类
+const selectCategory = (categoryId) => {
+  selectedCategoryId.value = categoryId
   router.push(`/forum/category/${categoryId}`)
 }
 
@@ -226,6 +264,15 @@ onMounted(() => {
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
   padding: 16px;
   padding-bottom: 80px;
+}
+
+.meta-item.liked {
+  color: #f44336;
+  font-weight: 600;
+}
+
+.meta-icon {
+  margin-right: 2px;
 }
 
 /* 页面标题 */
@@ -298,49 +345,62 @@ onMounted(() => {
   margin: 0 0 16px 0;
 }
 
-.category-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
-}
-
-.category-card {
+/* 水平滑动容器 */
+.category-scroll-container {
   background: white;
-  padding: 16px;
   border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s;
+  overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.category-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 16px rgba(76, 175, 80, 0.2);
+.category-scroll {
+  display: flex;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  /* 隐藏滑动条 */
+  scrollbar-width: none;
+}
+
+/* webkit浏览器滑动条 */
+.category-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.category-tab {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  cursor: pointer;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 .category-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
+  font-size: 20px;
+  display: block;
 }
 
-.category-name {
-  font-size: 16px;
-  font-weight: bold;
-  color: #333;
-  margin: 0 0 4px 0;
+.category-label {
+  font-size: 14px;
+  white-space: nowrap;
 }
 
-.category-desc {
-  font-size: 12px;
-  color: #666;
-  margin: 0 0 8px 0;
-  line-height: 1.4;
-}
-
-.post-count {
-  font-size: 12px;
+.category-tab:hover {
   color: #4caf50;
-  font-weight: 600;
+  background-color: #f5f5f5;
+}
+
+.category-tab.active {
+  color: #4caf50;
+  border-bottom-color: #4caf50;
+  background-color: rgba(76, 175, 80, 0.05);
 }
 
 /* 热门帖子区域 */
@@ -474,9 +534,61 @@ onMounted(() => {
 /* 元信息 */
 .post-meta {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  gap: 12px;
   font-size: 13px;
   color: #999;
+}
+
+.author-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  position: relative;
+  padding-bottom: 8px;
+}
+
+.author-info::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100px;
+  height: 1px;
+  background: #eee;
+}
+
+.author-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid #4caf50;
+}
+
+.author-avatar-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #999;
+  border: 1.5px solid #eee;
+}
+
+.author-name {
+  font-size: 13px;
+  color: #333;
+  font-weight: 600;
+}
+
+.stats-info {
+  display: flex;
+  gap: 16px;
 }
 
 .meta-item {
@@ -514,8 +626,16 @@ onMounted(() => {
 
 /* 响应式 */
 @media (max-width: 768px) {
-  .category-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .category-tab {
+    padding: 10px 12px;
+  }
+  
+  .category-label {
+    font-size: 12px;
+  }
+  
+  .category-icon {
+    font-size: 18px;
   }
   
   .page-title {

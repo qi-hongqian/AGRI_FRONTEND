@@ -118,15 +118,28 @@
         <span class="char-count">{{ formData.introduction.length }}/200</span>
       </div>
 
-      <!-- 提示信息 -->
-      <div v-if="errorMessage" class="error-message">
-        <span class="error-icon">⚠️</span>
-        <span>{{ errorMessage }}</span>
+      <!-- 邮箱 -->
+      <div class="form-group">
+        <label class="form-label">邮箱 <span class="optional">(可选)</span></label>
+        <input
+          v-model="formData.email"
+          type="email"
+          placeholder="请输入您的邮箱地址"
+          class="form-input"
+        />
       </div>
 
-      <div v-if="successMessage" class="success-message">
-        <span class="success-icon">✓</span>
-        <span>{{ successMessage }}</span>
+      <!-- 详细地址 -->
+      <div class="form-group">
+        <label class="form-label">详细地址 <span class="optional">(可选)</span></label>
+        <textarea
+          v-model="formData.detailAddress"
+          placeholder="例如：山东省济南市控个区中山路号码…"
+          maxlength="100"
+          rows="3"
+          class="form-textarea"
+        ></textarea>
+        <span class="char-count">{{ formData.detailAddress.length }}/100</span>
       </div>
 
       <!-- 按钮组 -->
@@ -140,6 +153,28 @@
         </button>
       </div>
     </form>
+
+    <!-- 确认弹窗 -->
+    <div v-if="showConfirmModal" class="modal-overlay" @click="closeConfirmModal">
+      <div class="confirm-modal" @click.stop>
+        <div class="modal-content">
+          <div class="modal-icon">❓</div>
+          <h3 class="modal-title">跳过完善信息</h3>
+          <p class="modal-text">确定要暂时跳过吗？完善信息可以获得更精准的内容推荐，您也可以稍后在个人中心进行编辑。</p>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn cancel" @click="closeConfirmModal">取消</button>
+          <button class="modal-btn confirm" @click="confirmSkip">确定跳过</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <transition name="toast">
+      <div v-if="showToast" class="toast-container" :class="`toast-${toastType}`">
+        <span class="toast-message">{{ toastMessage }}</span>
+      </div>
+    </transition>
 
     <!-- 底部提示 -->
     <div class="footer-tip">
@@ -163,7 +198,9 @@ const formData = ref({
   gender: null,
   profession: '',
   region: '',
-  introduction: ''
+  introduction: '',
+  email: '',
+  detailAddress: ''
 })
 
 // 地区数据
@@ -188,16 +225,51 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const isLoading = ref(true)
 
+// 弹窗相关状态
+const showConfirmModal = ref(false)
+
+// Toast提示相关
+const showToast = ref(false)
+const toastMessage = ref('')
+const toastType = ref('success') // 'success' | 'error' | 'info'
+
+// 显示Toast提示
+const displayToast = (message, type = 'success') => {
+  toastMessage.value = message
+  toastType.value = type
+  showToast.value = true
+  setTimeout(() => {
+    showToast.value = false
+  }, 2500)
+}
+
+// 打开跳过确认弹窗
+const skipFill = () => {
+  showConfirmModal.value = true
+}
+
+// 关闭弹窗
+const closeConfirmModal = () => {
+  showConfirmModal.value = false
+}
+
+// 确认跳过
+const confirmSkip = () => {
+  router.push('/profile')
+}
+
 // 计算完整度百分比
 const progressPercentage = computed(() => {
   let count = 0
-  const total = 5
+  const total = 7  // 增加到7个字段
 
   if (formData.value.realName) count++
   if (formData.value.gender) count++
   if (formData.value.profession) count++
   if (selectedProvince.value && selectedCity.value && selectedDistrict.value) count++
   if (formData.value.introduction) count++
+  if (formData.value.email) count++
+  if (formData.value.detailAddress) count++
 
   return Math.round((count / total) * 100)
 })
@@ -227,6 +299,8 @@ onMounted(async () => {
       if (data.gender && data.gender.value) formData.value.gender = data.gender.value
       if (data.profession) formData.value.profession = data.profession
       if (data.introduction) formData.value.introduction = data.introduction
+      if (data.email) formData.value.email = data.email
+      if (data.detailAddress) formData.value.detailAddress = data.detailAddress
       
       // 处理地区信息
       if (data.region) {
@@ -313,7 +387,9 @@ const submitForm = async () => {
       realName: formData.value.realName || '',  // 允许清空
       gender: formData.value.gender || '',      // 允许清空
       profession: formData.value.profession || '',  // 允许清空
-      introduction: formData.value.introduction || ''  // 允许清空
+      introduction: formData.value.introduction || '',  // 允许清空
+      email: formData.value.email || '',  // 新增字段
+      detailAddress: formData.value.detailAddress || ''  // 新增字段
     }
 
     // 构建地区文本格式
@@ -338,25 +414,19 @@ const submitForm = async () => {
     const res = await api.user.fillUserInfo(submitData)
 
     if (res.success) {
-      successMessage.value = '信息保存成功！'
+      displayToast('✅ 信息保存成功！', 'success')
+      // 延迟跳转回个人页面
       setTimeout(() => {
         router.push('/profile')
       }, 1500)
     } else {
-      errorMessage.value = res.message || '保存失败，请重试'
+      displayToast(res.message || '保存失败，请重试', 'error')
     }
   } catch (error) {
     console.error('提交失败:', error)
-    errorMessage.value = error.message || '网络错误，请检查连接后重试'
+    displayToast(error.message || '网络错误，请稍后重试', 'error')
   } finally {
     isSubmitting.value = false
-  }
-}
-
-// 暂时跳过
-const skipFill = () => {
-  if (confirm('确定要跳过吗？您可以稍后在个人页面编辑这些信息。')) {
-    router.push('/profile')
   }
 }
 
@@ -654,54 +724,139 @@ const goBack = () => {
   margin: 0;
 }
 
-/* 动画 */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 32px;
+  backdrop-filter: blur(4px);
 }
 
-/* 响应式设计 */
-@media (max-width: 600px) {
-  .form-container {
-    padding: 16px 12px;
-  }
+.confirm-modal {
+  background: white;
+  width: 100%;
+  max-width: 320px;
+  border-radius: 20px;
+  overflow: hidden;
+  animation: modalIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
 
-  .form-group {
-    padding: 14px;
-    margin-bottom: 12px;
-  }
+@keyframes modalIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
 
-  .header-section {
-    padding: 12px;
-  }
+.modal-content {
+  padding: 32px 24px;
+  text-align: center;
+}
 
-  .page-title {
-    font-size: 20px;
-  }
+.modal-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
 
-  .button-group {
-    flex-direction: column;
-    gap: 10px;
-  }
+.modal-title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin: 0 0 12px 0;
+}
 
-  .btn-primary,
-  .btn-secondary {
-    width: 100%;
-  }
+.modal-text {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.6;
+  margin: 0;
+}
 
-  .gender-options {
-    flex-direction: column;
-    gap: 10px;
-  }
+.modal-footer {
+  display: flex;
+  border-top: 1px solid #f0f0f0;
+}
 
-  .region-select-group {
-    gap: 8px;
-  }
+.modal-btn {
+  flex: 1;
+  padding: 16px;
+  border: none;
+  background: none;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.modal-btn.cancel {
+  color: #999;
+  border-right: 1px solid #f0f0f0;
+}
+
+.modal-btn.confirm {
+  color: #4CAF50;
+}
+
+.modal-btn:active {
+  background: #f9f9f9;
+}
+
+/* Toast提示样式 */
+.toast-container {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 3000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  min-width: 200px;
+  text-align: center;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #f44336 0%, #ef5350 100%);
+}
+
+.toast-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Toast动画 */
+.toast-enter-active {
+  animation: toast-in 0.3s ease-out;
+}
+
+.toast-leave-active {
+  animation: toast-out 0.3s ease-in;
+}
+
+@keyframes toast-in {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toast-out {
+  0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 }
 </style>

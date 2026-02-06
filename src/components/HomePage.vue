@@ -17,96 +17,112 @@
     </nav>
 
     <!-- 轮播图 -->
-    <div class="carousel" ref="carousel">
+    <div class="carousel" ref="carouselRef">
       <div class="carousel-container">
-        <!-- 每张轮播图及对应的文字 -->
         <div 
           v-for="(banner, index) in banners" 
-          :key="index" 
+          :key="banner.id || index" 
           class="carousel-item"
           :class="{ active: index === currentIndex }"
-          @touchstart="showCarouselIndicators" 
-          @mousedown="showCarouselIndicators">
-          <!-- 图片部分 -->
+          @click="handleBannerClick(banner)"
+        >
           <div class="carousel-image-wrapper">
-            <img :src="banner.image" :alt="banner.title" class="carousel-image">
+            <img :src="getImageUrl(banner.imageUrl)" :alt="banner.title" class="carousel-image">
           </div>
-          
-          <!-- 文字部分 - 位于图片下方 -->
           <div class="carousel-text-wrapper">
             <h2 class="carousel-title">{{ banner.title }}</h2>
-            <div class="carousel-tags">
-              <span 
-                v-for="(tag, tagIndex) in banner.tags" 
-                :key="tagIndex" 
-                class="tag">{{ tag }}</span>
-            </div>
           </div>
         </div>
       </div>
       
       <!-- 轮播指示器 -->
-      <div class="carousel-indicators" :class="{ 'indicators-visible': showIndicators }" @click="showCarouselIndicators">
+      <div class="carousel-indicators" :class="{ 'indicators-visible': showIndicators || banners.length > 1 }">
         <button 
           v-for="(banner, index) in banners" 
-          :key="index"
+          :key="banner.id || index"
           class="indicator"
           :class="{ active: index === currentIndex }"
-          @click="goToSlide(index)"
-          :aria-label="'跳转到第' + (index + 1) + '张'">
-        </button>
+          @click.stop="goToSlide(index)"
+        ></button>
+      </div>
+    </div>
+
+    <!-- 快捷功能区 (农业特色) -->
+    <div class="agri-features">
+      <div class="feature-card news" @click="$router.push('/news-list')">
+        <div class="feature-icon">📰</div>
+        <div class="feature-info">
+          <span class="feature-title">农业新闻</span>
+          <span class="feature-desc">掌握最新动向</span>
+        </div>
+      </div>
+
+      <!-- 新增：资讯AI\统计 -->
+      <div class="feature-card insight" @click="$router.push('/ai-insight')">
+        <div class="feature-icon">📊</div>
+        <div class="feature-info">
+          <span class="feature-title">数据洞察</span>
+          <span class="feature-desc">AI智能分析</span>
+        </div>
+      </div>
+      <div class="feature-card weather" @click="goToWeather">
+        <div class="feature-icon">☀️</div>
+        <div class="feature-info">
+          <span class="feature-title">农时天气</span>
+          <span class="feature-desc">科学指导农事</span>
+        </div>
+      </div>
+      <div class="feature-card collect" @click="handleToCollect">
+        <div class="feature-icon">⭐</div>
+        <div class="feature-info">
+          <span class="feature-title">我的收藏</span>
+          <span class="feature-desc">保存重要信息</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 农业资讯列表 -->
+    <div class="info-section">
+      <div class="section-header">
+        <h2 class="section-title">农业资讯</h2>
+        <div class="refresh-btn" @click="refreshList" :class="{ 'spinning': loading }">🔄</div>
       </div>
       
-      <!-- 轮播控制按钮 -->
-      <button class="carousel-control prev" @click="prevBanner" aria-label="上一张">‹</button>
-      <button class="carousel-control next" @click="nextBanner" aria-label="下一张">›</button>
-    </div>
-
-    <!-- 快捷功能按钮 - 修改为与导航栏一致的路由链接 -->
-    <div class="quick-access">
-      <router-link to="/home" class="quick-item">
-        <div class="quick-icon home-icon"></div>
-        <span>首页资讯</span>
-      </router-link>
-      <router-link to="/forum" class="quick-item">
-        <div class="quick-icon forum-icon"></div>
-        <span>资讯论坛</span>
-      </router-link>
-      <router-link to="/mall" class="quick-item">
-        <div class="quick-icon mall-icon"></div>
-        <span>农业商城</span>
-      </router-link>
-      <router-link to="/quiz" class="quick-item">
-        <div class="quick-icon quiz-icon"></div>
-        <span>农业答题</span>
-      </router-link>
-    </div>
-
-    <!-- 咨询新闻 -->
-    <div class="news-section">
-      <h2 class="section-title">最新资讯</h2>
-      <div class="news-list" v-if="!loading">
+      <div class="info-list" v-if="infoList.length > 0">
         <div 
-          v-for="(news, index) in newsList" 
-          :key="index" 
-          class="news-item"
-          @click="trackNewsClick(news)">
-          <div class="news-content">
-            <h3 class="news-title">{{ news.title }}</h3>
-            <p class="news-summary">{{ news.summary }}</p>
-            <div class="news-meta">
-              <span class="news-date">{{ news.publishDate }}</span>
-              <span class="news-category">{{ news.category }}</span>
+          v-for="info in infoList" 
+          :key="info.id" 
+          class="info-card"
+          @click="goToDetail(info.id)"
+        >
+          <div class="info-card-content">
+            <h3 class="info-card-title">{{ info.title }}</h3>
+            <div class="info-card-meta">
+              <span class="info-tag">{{ info.categoryName }}</span>
+              <span class="info-time">{{ formatTime(info.createTime) }}</span>
+              <span class="info-views">👁️ {{ info.viewCount }}</span>
             </div>
           </div>
-          <div class="news-image">
-            <img :src="news.image" :alt="news.title" loading="lazy">
+          <div class="info-card-image" v-if="info.coverImage">
+            <img :src="getImageUrl(info.coverImage)" :alt="info.title">
           </div>
         </div>
       </div>
-      <div v-else class="loading-state">
+
+      <!-- 加载更多 -->
+      <div class="load-more" v-if="pagination.current < pagination.pages">
+        <button @click="loadMore" :disabled="loading" class="load-more-btn">
+          {{ loading ? '加载中...' : '加载更多' }}
+        </button>
+      </div>
+
+      <div v-if="loading && infoList.length === 0" class="loading-state">
         <div class="loading-spinner"></div>
-        <p>加载中...</p>
+        <p>资讯加载中...</p>
+      </div>
+
+      <div v-if="!loading && infoList.length === 0" class="empty-state">
+        <p>暂无相关资讯</p>
       </div>
     </div>
 
@@ -116,9 +132,12 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+import { getEnvConfig } from '../config/env'
 import BottomNav from './BottomNav.vue'
-import { useHomeData } from '../composables/useHomeData'
+import api from '../api'
+import { useAppStore } from '../stores/app'
 
 export default {
   name: 'HomePage',
@@ -126,151 +145,204 @@ export default {
     BottomNav
   },
   setup() {
-    // 使用首页数据管理组合式函数
-    const { carouselList, newsList, loading, fetchCarousel, fetchNews } = useHomeData()
-    // 响应式状态
-    const homePageRef = ref(null);
-    const showNavBar = ref(true); // 默认显示导航栏
-    const showIndicators = ref(false); // 轮播点显示状态
-    let lastScrollTop = 0;
-    // 轮播点自动隐藏的定时器
-    let indicatorsTimer = null;
+    const router = useRouter()
+    const appStore = useAppStore()
     
-    // 处理滚动事件
-    const handleScroll = () => {
-      if (!homePageRef.value || !carousel.value) return;
-      
-      const scrollTop = homePageRef.value.scrollTop;
-      const carouselRect = carousel.value.getBoundingClientRect();
-      const headerHeight = 60; // 固定标题高度
-      const navbarHeight = 36; // 导航栏高度
-      
-      // 优化的滚动逻辑，解决下拉留白问题
-      // 当轮播图顶部接近标题底部时就显示导航栏
-      // 使用负数阈值，让导航栏在轮播图超过顶部标签一点点时就显示
-      if (carouselRect.top <= headerHeight - 10) {
-        // 轮播图超过标题底部一定距离，隐藏导航栏
-        showNavBar.value = false;
-      } else {
-        // 轮播图接近或未到达标题底部，显示导航栏
-        showNavBar.value = true;
-      }
-      
-      lastScrollTop = scrollTop;
-    };
+    // 构造完整的图片URL
+    const getImageUrl = (path) => {
+      if (!path) return ''
+      if (path.startsWith('http')) return path
+      const envConfig = getEnvConfig()
+      // 资讯模块统一请求 8082 (Content API)
+      return `${envConfig.CONTENT_API}${path}`
+    }
     
-    // 计算属性：将API数据转换为组件需要的格式
-    const banners = computed(() => {
-      return carouselList.value.map(item => ({
-        image: item.image,
-        title: item.title,
-        tags: item.tags || ['农业', '科技', '创新']
-      }))
-    })
+    // 基础状态
+    const homePageRef = ref(null)
+    const carouselRef = ref(null)
+    const showNavBar = ref(true)
+    const loading = ref(false)
     
+    // 轮播图状态
+    const banners = ref([])
     const currentIndex = ref(0)
-    const carousel = ref(null)
-    let timer = null
-    
-    // 显示轮播点并设置自动隐藏
-    const showCarouselIndicators = () => {
-      // 清除之前的定时器
-      if (indicatorsTimer) {
-        clearTimeout(indicatorsTimer)
+    const showIndicators = ref(false)
+    let carouselTimer = null
+    let indicatorsTimer = null
+
+    // 资讯列表状态
+    const infoList = ref([])
+    const pagination = reactive({
+      current: 1,
+      size: 10,
+      total: 0,
+      pages: 0
+    })
+
+    // 处理滚动隐藏导航栏
+    const handleScroll = () => {
+      if (!homePageRef.value) return
+      const scrollTop = homePageRef.value.scrollTop
+      // 如果向上滚动超过100px，隐藏导航栏以腾出空间
+      showNavBar.value = scrollTop < 100
+    }
+
+    // 获取轮播图
+    const fetchCarousels = async () => {
+      try {
+        const res = await api.agri.getCarousels()
+        if (res.success) {
+          banners.value = res.data
+        }
+      } catch (err) {
+        console.error('获取轮播失败:', err)
       }
-      
-      // 显示轮播点
+    }
+
+    // 获取资讯列表
+    const fetchInfoList = async (page = 1) => {
+      if (loading.value) return
+      loading.value = true
+      try {
+        const res = await api.agri.getIndexInfoList({ 
+          current: page, 
+          size: pagination.size 
+        })
+        if (res.success) {
+          if (page === 1) {
+            infoList.value = res.data.records
+          } else {
+            infoList.value = [...infoList.value, ...res.data.records]
+          }
+          pagination.current = res.data.current
+          pagination.total = res.data.total
+          pagination.pages = res.data.pages
+        }
+      } catch (err) {
+        console.error('获取资讯列表失败:', err)
+      } finally {
+        loading.value = false
+      }
+    }
+
+    // 加载更多
+    const loadMore = () => {
+      if (pagination.current < pagination.pages) {
+        fetchInfoList(pagination.current + 1)
+      }
+    }
+
+    // 刷新列表
+    const refreshList = () => {
+      fetchInfoList(1)
+    }
+
+    // 轮播控制
+    const startCarousel = () => {
+      stopCarousel()
+      carouselTimer = setInterval(() => {
+        if (banners.value.length > 0) {
+          currentIndex.value = (currentIndex.value + 1) % banners.value.length
+          showIndicators.value = true  // 确保指示器可见
+        }
+      }, 3000)
+    }
+
+    const stopCarousel = () => {
+      if (carouselTimer) clearInterval(carouselTimer)
+    }
+
+    const goToSlide = (index) => {
+      currentIndex.value = index
+      showIndicators.value = true  // 确保指示器可见
+      showCarouselIndicators()
+    }
+
+    const showCarouselIndicators = () => {
+      if (indicatorsTimer) clearTimeout(indicatorsTimer)
       showIndicators.value = true
-      
-      // 设置定时器，3秒后自动隐藏
       indicatorsTimer = setTimeout(() => {
         showIndicators.value = false
       }, 3000)
     }
-    
-    // 自动轮播
-    const startAutoPlay = () => {
-      timer = setInterval(() => {
-        nextBanner()
-      }, 3000) // 3秒切换一次
-    }
-    
-    // 清除自动轮播
-    const stopAutoPlay = () => {
-      if (timer) {
-        clearInterval(timer)
-        timer = null
-      }
-    }
-    
-    // 下一张
-    const nextBanner = () => {
-      currentIndex.value = (currentIndex.value + 1) % banners.length
-    }
-    
-    // 上一张
-    const prevBanner = () => {
-      currentIndex.value = (currentIndex.value - 1 + banners.length) % banners.length
-    }
-    
-    // 跳转到指定幻灯片
-    const goToSlide = (index) => {
-      currentIndex.value = index
-      showCarouselIndicators()
+
+    // 跳转逻辑
+    const goToDetail = (id) => {
+      router.push(`/info-detail/${id}`)
     }
 
-    // 新闻点击跟踪
-    const trackNewsClick = (news) => {
-      // 这里可以集成用户行为跟踪
-      console.log('News clicked:', news.title)
-      // 可以在这里添加路由跳转逻辑
-      // router.push(`/news/${news.id}`)
-    }
-    onMounted(async () => {
-      // 加载首页数据
-      await fetchCarousel()
-      await fetchNews()
-      
-      startAutoPlay()
-      
-      // 鼠标悬停时停止轮播，离开时继续
-      if (carousel.value) {
-        carousel.value.addEventListener('mouseenter', stopAutoPlay)
-        carousel.value.addEventListener('mouseleave', startAutoPlay)
+    const handleBannerClick = (banner) => {
+      if (banner.linkUrl) {
+        // 如果是外部链接或内部路径跳转
+        if (banner.linkUrl.startsWith('http')) {
+          window.open(banner.linkUrl, '_blank')
+        } else {
+          router.push(banner.linkUrl)
+        }
       }
+    }
+
+    const handleToCollect = () => {
+      console.log('[收藏] 当前登录状态:', {
+        isAuthenticated: appStore.isAuthenticated,
+        token: appStore.token?.substring(0, 20) + '...',
+        user: appStore.user
+      })
       
-      // 初始显示轮播点2秒，之后自动隐藏
+      if (!appStore.isAuthenticated) {
+        showToast('请先登录', 'error')
+        setTimeout(() => router.push('/login'), 1500)
+        return
+      }
+      router.push('/collect')
+    }
+
+    const goToWeather = () => {
+      console.log('[天气] 跳转到天气页面')
+      router.push('/weather')
+    }
+
+    // 工具函数
+    const formatTime = (time) => {
+      if (!time) return ''
+      const date = new Date(time)
+      return `${date.getMonth() + 1}-${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
+    }
+
+    onMounted(async () => {
+      await Promise.all([
+        fetchCarousels(),
+        fetchInfoList(1)
+      ])
+      startCarousel()
       showCarouselIndicators()
     })
-    
-    // 组件卸载时清除定时器和事件监听
+
     onUnmounted(() => {
-      stopAutoPlay()
-      if (carousel.value) {
-        carousel.value.removeEventListener('mouseenter', stopAutoPlay)
-        carousel.value.removeEventListener('mouseleave', startAutoPlay)
-      }
-      // 清除轮播点定时器，避免内存泄漏
-      if (indicatorsTimer) {
-        clearTimeout(indicatorsTimer)
-      }
+      stopCarousel()
+      if (indicatorsTimer) clearTimeout(indicatorsTimer)
     })
-    
+
     return {
-      banners,
-      newsList,
-      loading,
-      currentIndex,
-      carousel,
-      nextBanner,
-      prevBanner,
-      goToSlide,
       homePageRef,
+      carouselRef,
       showNavBar,
+      loading,
+      banners,
+      currentIndex,
       showIndicators,
-      showCarouselIndicators,
+      infoList,
+      pagination,
       handleScroll,
-      trackNewsClick
+      goToSlide,
+      loadMore,
+      refreshList,
+      goToDetail,
+      handleBannerClick,
+      handleToCollect,
+      goToWeather,
+      formatTime,
+      getImageUrl
     }
   }
 }
@@ -362,317 +434,286 @@ export default {
   background-color: rgba(255,255,255,0.1);
 }
 
-/* 轮播图样式 - 核心修正：移除白色背景和圆角，与导航栏连接 */
+/* 轮播图样式 */
 .carousel {
   position: relative;
-  width: 100%; /* 改为100%宽度，与导航栏完全对齐 */
-  margin: -1px auto 0 auto; /* 负边距让轮播图向上移动，与导航栏完全连接 */
+  width: 100%;
+  height: 200px;
   overflow: hidden;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  border-radius: 0; /* 明确设置无边角 */
-  /* 添加与导航栏相同的背景色，视觉上隐藏留白 */
-  background-color: #4CAF50; /* 与导航栏背景色一致 */
-  height: 100px !important; /* 使用!important确保覆盖全局样式 */
+  background-color: #f0f0f0;
 }
 
-/* 轮播容器 */
 .carousel-container {
+  width: 100%;
   height: 100%;
   position: relative;
 }
 
-/* 单个轮播项 - 修正：取消默认背景继承 */
 .carousel-item {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  opacity: 0; /* 默认隐藏 */
-  transition: opacity 0.5s ease-in-out;
-  display: flex;
-  flex-direction: column;
-  background: transparent; /* 明确设置透明，避免继承 */
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  cursor: pointer;
 }
 
 .carousel-item.active {
-  opacity: 1; /* 只显示活动的轮播项 */
-  z-index: 10;
+  opacity: 1;
+  z-index: 1;
 }
 
-/* 图片包装器 - 占满轮播高度 */
 .carousel-image-wrapper {
-  height: 100%; /* 修正：让图片区域占满轮播图高度 */
-  overflow: hidden;
+  width: 100%;
+  height: 100%;
 }
 
 .carousel-image {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* 保持图片比例并铺满容器 */
-  display: block;
+  object-fit: cover;
 }
 
-/* 文字包装器 - 核心修正：悬浮在图片上方，半透明背景增强可读性 */
 .carousel-text-wrapper {
-  position: absolute; /* 脱离文档流，悬浮在图片上方 */
-  bottom: 0; /* 靠底部对齐 */
+  position: absolute;
+  bottom: 0;
   left: 0;
-  right: 0; /* 左右铺满图片宽度 */
-  padding: 10px 20px; /* 减少垂直内边距 */
-  text-align: center;
-  background-color: rgba(0, 0, 0, 0.3); /* 半透明黑色背景，不遮挡图片细节 */
-  display: flex;
-  flex-direction: column;
-  max-height: 80px; /* 添加最大高度限制 */
-  justify-content: center; /* 垂直居中内容 */
-  justify-content: center;
-  z-index: 15; /* 确保在图片上方，低于指示器和控制按钮 */
+  right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  padding: 30px 15px 10px;
+  color: white;
+  z-index: 2;
 }
 
 .carousel-title {
-  margin: 0 0 8px 0; /* 减少标题与标签之间的间距 */
-  font-size: 20px; /* 减小字体大小 */
+  margin: 0;
+  font-size: 18px;
   font-weight: bold;
-  color: white; /* 白色文字适配半透明背景 */
-  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8); /* 增强文字立体感 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.carousel-tags {
-  display: flex;
-  gap: 15px;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-}
-
-.tag {
-  background-color: rgba(76, 175, 80, 0.8);
-  color: white;
-  padding: 8px 20px;
-  border-radius: 25px;
-  font-size: 15px;
-  font-weight: 500;
-  display: inline-block;
-}
-
-/* 轮播指示器 */
 .carousel-indicators {
   position: absolute;
-  bottom: 10px;
+  bottom: 15px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 10px;
-  z-index: 20; /* 确保在文字区域上方 */
-  opacity: 0; /* 默认隐藏 */
-  transition: opacity 0.5s ease-in-out; /* 渐变效果 */
-}
-
-/* 轮播点可见状态 */
-.carousel-indicators.indicators-visible {
-  opacity: 1; /* 可见时完全不透明 */
+  gap: 8px;
+  z-index: 3;
 }
 
 .indicator {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background-color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.5);
   border: none;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  outline: none;
   padding: 0;
+  cursor: pointer;
 }
 
 .indicator.active {
-  background-color: white;
-  transform: scale(1.2);
-}
-
-.indicator:hover {
-  background-color: rgba(255,255,255,0.8);
-}
-
-/* 轮播控制按钮 */
-.carousel-control {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 50px;
-  height: 50px;
-  background-color: rgba(0, 0, 0, 0.3);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  font-size: 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.3s;
-  z-index: 20; /* 确保在最上层 */
-}
-
-.carousel-control.prev {
-  left: 20px;
-}
-
-.carousel-control.next {
-  right: 20px;
-}
-
-.carousel-control:hover {
-  background-color: rgba(0,0,0,0.6);
-}
-
-/* 快捷功能按钮样式 */
-.quick-access {
-  max-width: 1200px;
-  margin: 30px auto;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  padding: 0 20px;
-}
-
-.quick-item {
-  background-color: white;
-  padding: 20px;
-  border-radius: 8px;
-  text-align: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: transform 0.3s, box-shadow 0.3s;
-  text-decoration: none;
-  color: #333;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.quick-item:hover,
-.quick-item.router-link-active {
-  transform: translateY(-5px);
-  box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-  color: #4CAF50;
-}
-
-.quick-icon {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 10px;
-  background-color: #e3f2fd;
-  border-radius: 50%;
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
-}
-
-/* 快捷功能图标样式 */
-.quick-icon.home-icon {
-  background-color: #e8f5e9;
-  background-image: url('https://via.placeholder.com/40/4CAF50/ffffff?text=🏠');
-}
-
-.quick-icon.forum-icon {
-  background-color: #e3f2fd;
-  background-image: url('https://via.placeholder.com/40/2196f3/ffffff?text=💬');
-}
-
-.quick-icon.mall-icon {
-  background-color: #fff3e0;
-  background-image: url('https://via.placeholder.com/40/ff9800/ffffff?text=🛒');
-}
-
-.quick-icon.quiz-icon {
-  background-color: #fce4ec;
-  background-image: url('https://via.placeholder.com/40/e91e63/ffffff?text=🎯');
-}
-
-.quick-icon.profile-icon {
-  background-color: #f3e5f5;
-  background-image: url('https://via.placeholder.com/40/9c27b0/ffffff?text=👤');
-}
-
-/* 激活状态的快捷功能图标 */
-.quick-item.router-link-active .quick-icon {
-  background-color: #4CAF50;
-}
-
-/* 新闻样式 */
-.news-section {
-  max-width: 1200px;
-  margin: 30px auto;
-  padding: 0 20px;
-}
-
-.section-title {
-  color: #333;
-  margin-bottom: 20px;
-  padding-bottom: 10px;
-  border-bottom: 2px solid #4CAF50;
-}
-
-.news-list {
-  display: grid;
-  gap: 20px;
-  margin-bottom: 50px;  
-}
-
-.news-item {
-  background-color: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  display: flex;
-  gap: 20px;
-}
-
-.news-content {
-  flex: 1;
-}
-
-.news-title {
-  color: #333;
-  margin: 0 0 10px 0;
-  font-size: 18px;
-}
-
-.news-summary {
-  color: #666;
-  margin: 0;
-  line-height: 1.6;
-}
-
-.news-image {
-  width: 150px;
-  height: 100px;
-  overflow: hidden;
+  background: #4CAF50;
+  width: 16px;
   border-radius: 4px;
 }
 
-.news-image img {
+/* 农业特色功能区 */
+.agri-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 15px;
+  background: white;
+  margin-bottom: 10px;
+}
+
+.feature-card {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f9f9f9;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.feature-card:active {
+  transform: scale(0.98);
+}
+
+.feature-icon {
+  font-size: 24px;
+  margin-right: 12px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.feature-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.feature-title {
+  font-size: 15px;
+  font-weight: bold;
+  color: #333;
+}
+
+.feature-desc {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+/* 资讯列表区 */
+.info-section {
+  background: white;
+  padding: 15px;
+  min-height: 400px;
+  margin-bottom: 70px; /* 为底部导航留出空间 */
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  border-left: 4px solid #4CAF50;
+  padding-left: 10px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.refresh-btn {
+  font-size: 18px;
+  cursor: pointer;
+  color: #4CAF50;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.info-card {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.info-card:last-child {
+  border-bottom: none;
+}
+
+.info-card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.info-card-title {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.info-card-meta {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #999;
+}
+
+.info-tag {
+  background: #e8f5e9;
+  color: #4CAF50;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.info-card-image {
+  width: 100px;
+  height: 70px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.info-card-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* 加载状态样式 */
-.loading-state {
+.load-more {
   text-align: center;
-  padding: 40px 20px;
-  color: #666;
+  margin-top: 20px;
+}
+
+.load-more-btn {
+  background: none;
+  border: 1px solid #4CAF50;
+  color: #4CAF50;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.load-more-btn:disabled {
+  opacity: 0.5;
+  border-color: #ccc;
+  color: #ccc;
+}
+
+.loading-state, .empty-state {
+  text-align: center;
+  padding: 40px 0;
+  color: #999;
 }
 
 .loading-spinner {
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
   border: 3px solid #f3f3f3;
   border-top: 3px solid #4CAF50;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin: 0 auto 20px;
+  margin: 0 auto 10px;
 }
 
 @keyframes spin {

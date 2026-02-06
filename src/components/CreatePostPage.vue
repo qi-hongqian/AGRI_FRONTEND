@@ -107,6 +107,13 @@
       </div>
     </div>
 
+    <!-- Toast提示 -->
+    <transition name="toast">
+      <div v-if="showToast" class="toast-container" :class="`toast-${toastType}`">
+        <span class="toast-message">{{ toastMessage }}</span>
+      </div>
+    </transition>
+
     <!-- 加载遮罩 -->
     <div v-if="publishing" class="publishing-overlay">
       <div class="publishing-box">
@@ -145,8 +152,23 @@ const publishing = ref(false)
 // 下拉框的打开状态
 const categoryDropdownOpen = ref(false)
 
-// 选中的分类名称
+// 下一阶：选中分类名称
 const selectedCategoryName = ref('')
+
+// Toast提示相关
+const showToast = ref(false)
+const toastMessage = ref('')
+const toastType = ref('success') // 'success' | 'error' | 'info'
+
+// 显示Toast提示
+const displayToast = (message, type = 'success') => {
+  toastMessage.value = message
+  toastType.value = type
+  showToast.value = true
+  setTimeout(() => {
+    showToast.value = false
+  }, 2500)
+}
 
 // 计算字符数
 const titleLength = computed(() => formData.value.title.length)
@@ -196,14 +218,14 @@ const handleImageUpload = async (event) => {
   
   // 检查数量限制
   if (tempImageUrls.value.length + files.length > 9) {
-    alert('最多只能上传逶9张图片')
+    displayToast('最多只能上传9张图片', 'info')
     return
   }
   
   // 检查文件大小
   for (const file of files) {
     if (file.size > 5 * 1024 * 1024) {
-      alert(`图片 ${file.name} 超过5MB，请压缩后上传`)
+      displayToast(`图片 ${file.name} 超过5MB，请压缩后上传`, 'error')
       return
     }
   }
@@ -222,11 +244,11 @@ const handleImageUpload = async (event) => {
       tempImageUrls.value.push(...urls)
       console.log('[CreatePostPage] 上传成功，临时URL:', urls)
     } else {
-      alert(res.message || '上传失败')
+      displayToast(res.message || '上传失败', 'error')
     }
   } catch (error) {
     console.error('[CreatePostPage] 上传图片错误:', error)
-    alert('上传失败，请重试')
+    displayToast('上传失败，请重试', 'error')
   }
   
   // 清空input
@@ -262,40 +284,40 @@ const handlePublish = async () => {
   
   // 1. 标题验证
   if (!formData.value.title || formData.value.title.trim() === '') {
-    alert('❌ 请输入帖子标题')
+    displayToast('❌ 请输入帖子标题', 'error')
     return
   }
   
   if (formData.value.title.length > 50) {
-    alert('❌ 标题不能超过50个字')
+    displayToast('❌ 标题不能超过50个字', 'error')
     return
   }
   
   // 2. 内容验证
   if (!formData.value.content || formData.value.content.trim() === '') {
-    alert('❌ 请输入帖子内容')
+    displayToast('❌ 请输入帖子内容', 'error')
     return
   }
   
   if (formData.value.content.length < 10) {
-    alert('❌ 内容至少需要有10个字')
+    displayToast('❌ 内容至少需要有10个字', 'error')
     return
   }
   
   if (formData.value.content.length > 400) {
-    alert('❌ 内容不能超过400个字')
+    displayToast('❌ 内容不能超过400个字', 'error')
     return
   }
   
   // 3. 分类验证
   if (!formData.value.categoryId) {
-    alert('❌ 请选择帖子分类')
+    displayToast('❌ 请选择帖子分类', 'error')
     return
   }
   
   // 4. 图片验证（可选）
   if (tempImageUrls.value.length > 9) {
-    alert('❌ 最多只能上传逶9张图片')
+    displayToast('❌ 最多只能上传9张图片', 'error')
     return
   }
   
@@ -317,16 +339,23 @@ const handlePublish = async () => {
     const res = await api.forum.createPost(postData)
     
     if (res.success) {
-      alert('✅ 发布成功！')
+      displayToast('✅ 发布成功！', 'success')
       // 跳转到帖子详情
       const postId = res.data.id
-      router.push(`/forum/post/${postId}`)
+      console.log('[CreatePostPage] 发布成功，postId:', postId, '准备跳转到详情页')
+      setTimeout(() => {
+        router.replace({
+          name: 'PostDetail',
+          params: { id: postId }
+        })
+      }, 1500)
     } else {
-      alert('❌ ' + (res.message || '发布失败'))
+      console.error('[CreatePostPage] 发布失败:', res)
+      displayToast('❌ ' + (res.message || '发布失败'), 'error')
     }
   } catch (error) {
     console.error('发布失败:', error)
-    alert('发布失败，请重试')
+    displayToast('发布失败，请重试', 'error')
   } finally {
     publishing.value = false
   }
@@ -667,6 +696,75 @@ onMounted(() => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* Toast提示样式 */
+.toast-container {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 2000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  min-width: 200px;
+  text-align: center;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #f44336 0%, #ef5350 100%);
+}
+
+.toast-info {
+  background: linear-gradient(135deg, #2196F3 0%, #42a5f5 100%);
+}
+
+.toast-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Toast动画 */
+.toast-enter-active {
+  animation: toast-in 0.3s ease-out;
+}
+
+.toast-leave-active {
+  animation: toast-out 0.3s ease-in;
+}
+
+@keyframes toast-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes toast-out {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
 }
 
 /* 响应式 */

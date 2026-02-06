@@ -1,5 +1,24 @@
 import { defineStore } from 'pinia'
 
+// 解析JWT Token获取用户信息（包括role）
+const parseJwtToken = (token) => {
+  if (!token) return null
+  try {
+    const base64Url = token.split('.')[1]
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    return JSON.parse(jsonPayload)
+  } catch (error) {
+    console.error('[解析Token失败]', error)
+    return null
+  }
+}
+
 export const useAppStore = defineStore('app', {
   state: () => ({
     // 用户状态
@@ -52,6 +71,17 @@ export const useAppStore = defineStore('app', {
       if (user && user.token) {
         this.token = user.token
         localStorage.setItem('token', user.token)
+        
+        // 从 JWT Token 中解析 role
+        const tokenPayload = parseJwtToken(user.token)
+        if (tokenPayload && tokenPayload.role) {
+          this.user.role = tokenPayload.role
+          console.log('[用户角色]', tokenPayload.role)
+        } else if (!this.user.role) {
+          // 如果没有role，默认为user
+          this.user.role = 'user'
+          console.log('[用户角色] 默认为 user')
+        }
       }
     },
     
@@ -60,6 +90,14 @@ export const useAppStore = defineStore('app', {
       this.token = null
       this.infoCompletionRate = 0  // 添加：登出时清除完成度
       localStorage.removeItem('token')
+      
+      // 清除所有以 insight_data_ 开头的 sessionStorage 缓存
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('insight_data_')) {
+          sessionStorage.removeItem(key)
+        }
+      })
+      
       this.clearAllModuleData()
     },
     
